@@ -76,7 +76,7 @@ The world of Persuasion features subtle supernatural elements, rooted in psychol
 ✔️ Save/load functionality
 ✔️ Procedural map generation and mansion layouts
 ✔️ Optional suspect combat and murder ambushes
-✔️ Stylish retro aesthetic and 8-bit inspired art
+✔️ Stylish retro aesthetic and 8-bit inspired art (WIP as DLC)
 
 
 ---
