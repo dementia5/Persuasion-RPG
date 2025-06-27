@@ -1,4 +1,4 @@
-# Persuasion: Victorian Roguelike Investigation Game
+# Persuasion: Victorian Roguelike Investigation RPG Game
 # Core Game Script
 
 import os
