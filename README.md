@@ -54,7 +54,7 @@ With its nostalgic ASCII-style map, fully text-driven interface, and Choose-Your
 
 🧠 Replayable, Deep, and Immersive
 
-No two playthroughs are alike. With over 49 potential room nodes, branching paths, stat-based combat, and randomized clue & suspect combinations, Persuasion invites repeat investigations. A full session can last 2–5 hours, or stretch longer for completionists and careful sleuths.
+No two playthroughs are alike. With over 120 potential room nodes, branching paths, stat-based combat, and randomized clue & suspect combinations, Persuasion invites repeat investigations. A full session can last 2–5 hours, or stretch longer for completionists and careful sleuths.
 
 
 ---
