@@ -5,8 +5,16 @@ import os
 import time
 import random
 import json
+import sys
+import threading
 
-# Global player state
+# --- Global State ---
+
+MAP_MIN = -8
+MAP_MAX = 7
+MAP_SIZE = MAP_MAX - MAP_MIN + 1  # 16
+MAP_CENTER = (MAP_SIZE // 2) - 1  # Center of the map grid
+
 previous_menu_function = None
 
 valid_directions = {"n", "s", "e", "w", "ne", "nw", "se", "sw"}
@@ -31,9 +39,10 @@ game_state = {
     "turns": 0,
     "visited_locations": {},
     "position": (0, 0),
+    "walls": set(),  # Each wall is ((x1, y1), (x2, y2))
 }
 
-room_templates = {
+room_templates = room_templates = {
     "Foyer": [
         "The grand entry is dimly lit. Dust motes float through the silence. You hear footsteps upstairs, then silence again."
     ],
@@ -111,13 +120,45 @@ room_templates = {
     ]
 }
 
-
 suspect_templates = [
     {"name": "Miss Vexley", "trait": "Nervous", "alibi": "Claims she was in the chapel praying."},
     {"name": "Dr. Lorn", "trait": "Stoic", "alibi": "Was tending the fire in the lounge."},
     {"name": "Bishop Greaves", "trait": "Fanatical", "alibi": "Says he heard voices in the cellar."},
-    {"name": "Colonel Catsup", "trait": "Charming", "alibi": "Claims he was entertaining guests all night."}
+    {"name": "Colonel Catsup", "trait": "Charming", "alibi": "Claims he was entertaining guests all night."},
+    {"name": "Lady Ashcroft", "trait": "Secretive", "alibi": "Insists she was alone in the solarium, reading."},
+    {"name": "Mr. Blackwood", "trait": "Cynical", "alibi": "Claims he was repairing a broken window in the attic."}
 ]
+
+def generate_walls():
+    wall_chance = 0.18  # 18% chance for a wall between any two adjacent rooms
+    for x in range(MAP_MIN, MAP_MAX + 1):
+        for y in range(MAP_MIN, MAP_MAX + 1):
+            for dx, dy in [(0, 1), (1, 0)]:  # Only need to check E and S to avoid duplicates
+                nx, ny = x + dx, y + dy
+                if MAP_MIN <= nx <= MAP_MAX and MAP_MIN <= ny <= MAP_MAX:
+                    if random.random() < wall_chance:
+                        # Store both directions for easy lookup
+                        game_state["walls"].add(((x, y), (nx, ny)))
+                        game_state["walls"].add(((nx, ny), (x, y)))
+
+def initialize_suspects():
+    game_state["suspects"] = random.sample(suspect_templates, 4)
+    player_pos = (0, 0)
+    MAP_MIN = -8
+    MAP_MAX = 7
+    # Generate possible positions within 2-4 tiles of player and inside bounds
+    possible_positions = []
+    for dx in range(-4, 5):
+        for dy in range(-4, 5):
+            dist = abs(dx) + abs(dy)
+            pos = (player_pos[0] + dx, player_pos[1] + dy)
+            if 2 <= dist <= 4 and MAP_MIN <= pos[0] <= MAP_MAX and MAP_MIN <= pos[1] <= MAP_MAX and pos != player_pos:
+                possible_positions.append(pos)
+    # If not enough possible positions, just use whatever is available
+    chosen_positions = random.sample(possible_positions, 4)
+    for suspect, pos in zip(game_state["suspects"], chosen_positions):
+        suspect["position"] = pos
+        suspect["wait_turns"] = 0
 
 clue_pool = [
     "A silver pendant etched with tentacles.",
@@ -128,7 +169,6 @@ clue_pool = [
     "A page torn from a forbidden tome."
 ]
 
-# --- Reset Game State Function ---
 def reset_game_state():
     # Clear all mutable game state for a fresh start
     game_state["inventory"] = []
@@ -139,26 +179,40 @@ def reset_game_state():
     game_state["location"] = ""
     game_state["turns"] = 0
     game_state["visited_locations"] = {}
-    game_state["position"] = (5, 1)
+    game_state["position"] = (0, 0)
     for stat in ["faith", "sanity", "perception", "strength", "stamina", "agility", "comeliness"]:
         game_state[stat] = 0
     game_state["name"] = ""
     game_state["gender"] = ""
     game_state["background"] = ""
 
-# Helper functions
-
 def clear():
     os.system('cls' if os.name == 'nt' else 'clear')
 
 def delay_print(s, speed=0.03):
+    """Prints text slowly, but finishes instantly if the user presses space."""
+    import msvcrt  # Windows only; for cross-platform, use 'getch' from 'getch' package
+
+    stop = [False]
+
+    def check_space():
+        while not stop[0]:
+            if msvcrt.kbhit():
+                key = msvcrt.getch()
+                if key == b' ':
+                    stop[0] = True
+                    break
+
+    thread = threading.Thread(target=check_space, daemon=True)
+    thread.start()
+
     for c in s:
+        if stop[0]:
+            print(s[s.index(c):], end='', flush=True)
+            break
         print(c, end='', flush=True)
         time.sleep(speed)
     print()
-
-import json
-import os
 
 def save_game():
     try:
@@ -174,7 +228,6 @@ def save_game():
     except Exception as e:
         print(f"Error saving game: {e}")
     input("Press Enter to continue.")
-
 
 def load_game():
     global game_state, previous_menu_function
@@ -205,18 +258,75 @@ def load_game():
         else:
             print("No save file found.")
             input("\nPress Enter to return.")
-
             title_screen()
-
     except Exception as e:
         print(f"Error loading game: {e}")
         input("\nPress Enter to return.")
-
         title_screen()
 
+def move_to_new_room(direction=None):
+    x, y = game_state["position"]
+    moves = {
+        "n": (0, -1),
+        "s": (0, 1),
+        "e": (1, 0),
+        "w": (-1, 0),
+        "ne": (1, -1),
+        "nw": (-1, -1),
+        "se": (1, 1),
+        "sw": (-1, 1)
+    }
+    if direction not in moves:
+        direction = random.choice(list(moves.keys()))
+    dx, dy = moves[direction]
+    new_x, new_y = x + dx, y + dy
 
-def initialize_suspects():
-    game_state["suspects"] = random.sample(suspect_templates, 3)
+    # Wall check
+    if ((x, y), (new_x, new_y)) in game_state["walls"]:
+        delay_print("A wall blocks your way. You cannot go that direction.")
+        input("Press Enter to continue.")
+        describe_room()
+        return
+
+    # ...rest of your movement code...
+
+def move_suspects():
+    """Move each suspect to a random adjacent visited room, or let them stand still for 1-2 turns."""
+    for suspect in game_state["suspects"]:
+        # Initialize suspect position if not set (start at random valid position)
+        if "position" not in suspect or suspect["position"] is None:
+            while True:
+                pos = (random.randint(MAP_MIN, MAP_MAX), random.randint(MAP_MIN, MAP_MAX))
+                if pos != game_state["position"]:
+                    suspect["position"] = pos
+                    suspect["wait_turns"] = 0
+                    break
+
+        # Handle waiting (standing still)
+        if suspect.get("wait_turns", 0) > 0:
+            suspect["wait_turns"] -= 1
+            continue  # Skip movement this turn
+
+        # 1 in 3 chance to stand still for 1 or 2 turns
+        if random.random() < 1/3:
+            suspect["wait_turns"] = random.choice([1, 2])
+            continue
+
+        # Get all adjacent positions that are visited
+        x, y = suspect["position"]
+        adjacent = [
+            (x + dx, y + dy)
+            for dx, dy in [
+                (0, 1), (0, -1), (1, 0), (-1, 0),  # N, S, E, W
+                (1, 1), (-1, 1), (1, -1), (-1, -1) # NE, NW, SE, SW
+            ]
+            if (x + dx, y + dy) in game_state["visited_locations"]
+        ]
+
+        # Move to a random adjacent visited room if possible
+        if adjacent:
+            suspect["position"] = random.choice(adjacent)
+        # else: no move (surrounded by unvisited rooms or walls)
 
 def show_stats():
     clear()
@@ -267,9 +377,13 @@ def show_map():
     location = game_state["location"]
     pos = game_state["position"]
     delay_print(f"Current Location: {location} at {pos}")
-    # ASCII map rendering
     delay_print("\nMap:")
-    render_map()
+    # Prompt for NPC toggle
+    show_npcs = False
+    choice = input("Show suspects on map? (Y/N): ").strip().lower()
+    if choice == "y":
+        show_npcs = True
+    render_map(show_npcs)
     input("\nPress Enter to return.")
 
     if previous_menu_function:
@@ -277,20 +391,30 @@ def show_map():
     else:
         title_screen()
 
-def render_map():
-    # Show a simple 11x11 grid centered around player position (0,0)
+def render_map(show_npcs=False):
+    # Show a simple 11x11 grid centered around player position
     grid_size = 11
     half = grid_size // 2
     px, py = game_state["position"]
 
+    # Build a lookup for suspect positions if showing NPCs
+    suspect_positions = {}
+    if show_npcs:
+        for idx, s in enumerate(game_state["suspects"], 1):
+            pos = s.get("position")
+            if pos:
+                suspect_positions.setdefault(pos, []).append(str(idx))
+
     for y in range(py - half, py + half + 1):
         row = ""
         for x in range(px - half, px + half + 1):
-            if (x,y) == (px, py):
-                # Player position
-                row += " @ "
-            elif (x,y) in game_state["visited_locations"]:
-                loc = game_state["visited_locations"][(x,y)]
+            if (x, y) == (px, py):
+                row += " @ "  # Player position
+            elif show_npcs and (x, y) in suspect_positions:
+                # Show all suspects at this position (as numbers)
+                row += " " + "".join(suspect_positions[(x, y)]) + " "
+            elif (x, y) in game_state["visited_locations"]:
+                loc = game_state["visited_locations"][(x, y)]
                 row += f" {loc[0]} "  # First letter of location
             else:
                 row += " . "
@@ -350,7 +474,6 @@ def handle_input(user_input, return_function):
         delay_print("Unknown command. Type 'help' for available options.")
         return_function()
 
-
 def show_help():
     delay_print("Available commands:")
     delay_print("- save: Save your game")
@@ -386,7 +509,7 @@ def title_screen():
   _____                              _             
  |  __ \                            (_)            
  | |__) |__ _ __ ___ _   _  __ _ ___ _  ___  _ __  
- |  ___/ _ \ '__/ __| | | |/ _` / __| |/ _ \| '_ \\
+ |  ___/ _ \ '__/ __| | | |/ _` / __| |/ _ \| '_ \ 
  | |  |  __/ |  \__ \ |_| | (_| \__ \ | (_) | | | |
  |_|   \___|_|  |___/\__,_|\__,_|___/_|\___/|_| |_|
                                                   
@@ -419,12 +542,7 @@ def instructions():
     delay_print("Global commands can be entered anytime (help, save, load, quit, back, menu, title).")
     delay_print("Optional commands include: journal, map, stats, quests, inventory.")
     input("\nPress Enter to return.")
-
     title_screen()
-
-# --- Have narrative text distort as insanity increases ---
-
-import random
 
 def distort_text(text, sanity):
     if sanity >= 7:
@@ -447,7 +565,6 @@ def distort_text(text, sanity):
         return random.choice(gibberish)
 
 def move_to_new_room(direction=None):
-    # Movement logic using coordinate system and visited_locations
     x, y = game_state["position"]
     moves = {
         "n": (0, -1),
@@ -462,7 +579,16 @@ def move_to_new_room(direction=None):
     if direction not in moves:
         direction = random.choice(list(moves.keys()))
     dx, dy = moves[direction]
-    new_pos = (x + dx, y + dy)
+    new_x, new_y = x + dx, y + dy
+
+    # Limit movement to within 16x16 grid
+    if not (MAP_MIN <= new_x <= MAP_MAX and MAP_MIN <= new_y <= MAP_MAX):
+        delay_print("You sense an unnatural barrier. The manor does not extend further in that direction.")
+        input("Press Enter to continue.")
+        describe_room()
+        return
+
+    new_pos = (new_x, new_y)
     game_state["position"] = new_pos
 
     # Assign a new or existing location name for new_pos
@@ -471,10 +597,22 @@ def move_to_new_room(direction=None):
         game_state["visited_locations"][new_pos] = new_location
     game_state["location"] = game_state["visited_locations"][new_pos]
 
+    # Move suspects after player moves
+    move_suspects()
+
+    # Check for suspects in the same room
+    suspects_here = [
+        s for s in game_state["suspects"]
+        if s.get("position") == game_state["position"]
+    ]
+    if suspects_here:
+        names = ', '.join(s["name"] for s in suspects_here)
+        delay_print(f"You see someone here: {names}")
+
     input("Press Enter to enter the new room.")
+    
     describe_room()
 
-# Add clue with pause
 def add_random_clue():
     clue = random.choice(clue_pool)
     if clue not in game_state["clues"]:
@@ -520,7 +658,6 @@ def describe_room():
         add_random_clue()
         describe_room()
     elif user_input == "2":
-        # Ask for direction input
         clear()
         print("Where would you like to go? (N, S, E, W, NE, NW, SE, SW)")
         dir_input = input("> ").strip().lower()
@@ -545,6 +682,7 @@ def describe_room():
         title_screen()
     else:
         handle_input(user_input, describe_room)
+
 def interrogate_suspect():
     global previous_menu_function
     previous_menu_function = interrogate_suspect
@@ -611,6 +749,7 @@ def enter_manor():
     previous_menu_function = enter_manor
     clear()
     delay_print("You step into the manor, the scent of mildew thick in your nostrils. A shadow slips past the stairs, just at the edge of sight.")
+    input("Press Enter to continue.")
     character_creation()
 
 def character_creation():
@@ -628,16 +767,16 @@ def character_creation():
     print("[4] Ex-Priest – +1 Faith, +1 Sanity")
 
     bg = input("> ")
-    if bg == "1" or bg == "Theologian":
+    if bg == "1" or bg.lower() == "theologian":
         game_state["background"] = "Theologian"
         game_state["faith"] += 2
-    elif bg == "2" or bg == "Occultist":
+    elif bg == "2" or bg.lower() == "occultist":
         game_state["background"] = "Occultist"
         game_state["sanity"] += 2
-    elif bg == "3" or bg == "Detective":
+    elif bg == "3" or bg.lower() == "detective":
         game_state["background"] = "Detective"
         game_state["perception"] += 2
-    elif bg == "4" or bg == "Ex-Priest":
+    elif bg == "4" or bg.lower() == "ex-priest":
         game_state["background"] = "Ex-Priest"
         game_state["faith"] += 1
         game_state["sanity"] += 1
@@ -650,16 +789,24 @@ def character_creation():
         base = 8 + random.randint(1, 4)
         game_state[stat] = base
 
-    # Allow player to distribute 6 additional points
+     # Allow player to distribute 6 additional points
     stat_points = 6
+    stats_list = ["faith", "sanity", "perception", "strength", "stamina", "agility", "comeliness"]
     print("\nDistribute 6 additional points among your attributes (for a max of 18):")
     while stat_points > 0:
         print(f"\nPoints remaining: {stat_points}")
-        for stat in ["faith", "sanity", "perception", "strength", "stamina", "agility", "comeliness"]:
-            print(f"{stat.capitalize()}: [{game_state[stat]}]")
+        for idx, stat in enumerate(stats_list, 1):
+            print(f"[{idx}] {stat.capitalize()}: [{game_state[stat]}]")
 
-        chosen_stat = input("\nEnter the attribute to increase: ").lower()
-        if chosen_stat not in game_state or chosen_stat not in ["faith", "sanity", "perception", "strength", "stamina", "agility", "comeliness"]:
+        chosen_stat = input("\nEnter the attribute to increase (name or number): ").strip().lower()
+        if chosen_stat.isdigit():
+            stat_idx = int(chosen_stat) - 1
+            if 0 <= stat_idx < len(stats_list):
+                chosen_stat = stats_list[stat_idx]
+            else:
+                print("Invalid stat number. Try again.")
+                continue
+        elif chosen_stat not in stats_list:
             print("Invalid stat name. Try again.")
             continue
 
@@ -688,6 +835,7 @@ def character_creation():
     game_state["visited_locations"] = {(0, 0): "Foyer"}
     game_state["location"] = "Foyer"
     game_state["position"] = (0, 0)
+    generate_walls()  # <--- Add this line
     delay_print(f"Welcome, {game_state['name']} the {game_state['background']}. The hour is late, and the shadows grow bold.")
     input("Press Enter to begin.")
     start_first_case()
@@ -697,8 +845,6 @@ def start_first_case():
     previous_menu_function = start_first_case
     game_state["quests"].append("Investigate Manor Seance")
     describe_room()
-
-# --- Skill-check combat system ---
 
 def skill_check_combat(enemy_name, enemy_difficulty, stat="strength"):
     clear()
@@ -722,141 +868,5 @@ def skill_check_combat(enemy_name, enemy_difficulty, stat="strength"):
 
     input("Press Enter to continue.")
 
-# Start the game by showing title screen
-title_screen()
-# Movement system with coordinates and ASCII map visualization
-
-# Direction vectors for coordinate changes
-direction_vectors = {
-    "n":  (0, 1),
-    "s":  (0, -1),
-    "e":  (1, 0),
-    "w":  (-1, 0),
-    "ne": (1, 1),
-    "nw": (-1, 1),
-    "se": (1, -1),
-    "sw": (-1, -1)
-}
-
-def display_map():
-    clear()
-    # Get all visited coordinates
-    coords = list(game_state.get("visited_locations", {}).keys())
-    if not coords:
-        delay_print("Map is empty. No locations visited yet.")
-        input("\nPress Enter to return.")
-
-        previous_menu_function()
-        return
-    
-    xs = [c[0] for c in coords]
-    ys = [c[1] for c in coords]
-
-    min_x, max_x = min(xs), max(xs)
-    min_y, max_y = min(ys), max(ys)
-
-    # Build a grid
-    grid = []
-    for y in range(max_y, min_y - 1, -1):
-        row = []
-        for x in range(min_x, max_x + 1):
-            if (x, y) == game_state.get("position"):
-                row.append("P")  # Player's current position
-            elif (x, y) in game_state["visited_locations"]:
-                row.append("O")  # Visited location
-            else:
-                row.append(".")  # Unknown / unvisited
-        grid.append(row)
-
-    # Print the map
-    print("Map Key: P=You, O=Visited Location, .=Unknown\n")
-    for row in grid:
-        print(" ".join(row))
-
-    print("\nVisited Locations:")
-    for coord, name in game_state["visited_locations"].items():
-        print(f"{name} at {coord}")
-
-    input("\nPress Enter to return.")
-    previous_menu_function()
-
-def move_player():
-    global previous_menu_function
-    previous_menu_function = move_player
-    clear()
-    delay_print(f"Current location: {game_state['location']} at {game_state['position']}")
-    delay_print("Choose direction to move: N, S, E, W, NE, NW, SE, SW or 'back' to return.")
-    user_input = input("> ").strip().lower()
-
-    if user_input in ["back", "menu"]:
-        previous_menu_function = describe_room
-        describe_room()
-        return
-    elif user_input in direction_vectors:
-        dx, dy = direction_vectors[user_input]
-        new_x = game_state["position"][0] + dx
-        new_y = game_state["position"][1] + dy
-        new_pos = (new_x, new_y)
-
-        # Check if location exists or create new room
-        if new_pos in game_state.get("visited_locations", {}):
-            new_location = game_state["visited_locations"][new_pos]
-        else:
-            new_location = random.choice(list(room_templates.keys()))
-            game_state["visited_locations"][new_pos] = new_location
-
-        game_state["position"] = new_pos
-        game_state["location"] = new_location
-        delay_print(f"You move {user_input.upper()} to {new_location}.")
-        input("Press Enter to continue.")
-        describe_room()
-    else:
-        delay_print("Invalid direction.")
-        input("Press Enter to continue.")
-        move_player()
-
-# ---------- Encounter Example ----------
-def encounter():
-    delay_print("A hooded cultist blocks your way.")
-    print("[1] Strike with cane")
-    print("[2] Attempt banishment")
-    print("[3] Flee")
-
-    choice = input("> ")
-    if choice == "1":
-        skill_check("combat")
-    elif choice == "2":
-        skill_check("faith")
-    elif choice == "3":
-        delay_print("You escape into the fog. But the case remains.")
-        input("Press Enter to return to title.")
-        title_screen()
-    else:
-        encounter()
-
-# ---------- Skill Check ----------
-def skill_check(skill):
-    roll = random.randint(1, 10)
-    bonus = 0
-    if skill == "faith":
-        bonus = game_state["faith"]
-    elif skill == "combat":
-        bonus = 2 if game_state["background"] in ["Detective", "Ex-Priest"] else 0
-
-    total = roll + bonus
-    delay_print(f"Skill check: {roll} + {bonus} = {total}")
-
-    if total >= 8:
-        delay_print("Success! The cultist is defeated.")
-        game_state["quests"].remove("Investigate Manor Seance")
-        input("Press Enter to save progress.")
-        save_game()
-        title_screen()
-    else:
-        game_state["sanity"] -= 1
-        delay_print("You fail. Your mind frays. (-1 Sanity)")
-        input("Press Enter to try again.")
-        describe_room()
-
-# Start the game
+# --- Start the game ---
 title_screen()
