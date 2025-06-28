@@ -116,8 +116,13 @@ suspect_templates = [
     {"name": "Miss Vexley", "trait": "Nervous", "alibi": "Claims she was in the chapel praying."},
     {"name": "Dr. Lorn", "trait": "Stoic", "alibi": "Was tending the fire in the lounge."},
     {"name": "Bishop Greaves", "trait": "Fanatical", "alibi": "Says he heard voices in the cellar."},
-    {"name": "Colonel Catsup", "trait": "Charming", "alibi": "Claims he was entertaining guests all night."}
+    {"name": "Colonel Catsup", "trait": "Charming", "alibi": "Claims he was entertaining guests all night."},
+    {"name": "Lady Ashcroft", "trait": "Secretive", "alibi": "Insists she was alone in the solarium, reading."},
+    {"name": "Mr. Blackwood", "trait": "Cynical", "alibi": "Claims he was repairing a broken window in the attic."}
 ]
+
+def initialize_suspects():
+    game_state["suspects"] = random.sample(suspect_templates, 4)
 
 clue_pool = [
     "A silver pendant etched with tentacles.",
@@ -218,6 +223,42 @@ def load_game():
 def initialize_suspects():
     game_state["suspects"] = random.sample(suspect_templates, 3)
 
+
+def move_suspects():
+    """Move each suspect to a random adjacent visited room, or let them stand still for 1-2 turns."""
+    for suspect in game_state["suspects"]:
+        # Initialize suspect position if not set (start at random visited room)
+        if "position" not in suspect or suspect["position"] is None:
+            suspect["position"] = random.choice(list(game_state["visited_locations"].keys()))
+            suspect["wait_turns"] = 0
+
+        # Handle waiting (standing still)
+        if suspect.get("wait_turns", 0) > 0:
+            suspect["wait_turns"] -= 1
+            continue  # Skip movement this turn
+
+        # 1 in 3 chance to stand still for 1 or 2 turns
+        if random.random() < 1/3:
+            suspect["wait_turns"] = random.choice([1, 2])
+            continue
+
+        # Get all adjacent positions that are visited
+        x, y = suspect["position"]
+        adjacent = [
+            (x + dx, y + dy)
+            for dx, dy in [
+                (0, 1), (0, -1), (1, 0), (-1, 0),  # N, S, E, W
+                (1, 1), (-1, 1), (1, -1), (-1, -1) # NE, NW, SE, SW
+            ]
+            if (x + dx, y + dy) in game_state["visited_locations"]
+        ]
+
+        # Move to a random adjacent visited room if possible
+        if adjacent:
+            suspect["position"] = random.choice(adjacent)
+        # else: no move (surrounded by unvisited rooms or walls)
+
+
 def show_stats():
     clear()
     delay_print(f"Name: {game_state['name']}")
@@ -262,14 +303,13 @@ def show_quests():
     else:
         title_screen()
 
-def show_map():
+def show_map(show_npcs=False):
     clear()
     location = game_state["location"]
     pos = game_state["position"]
     delay_print(f"Current Location: {location} at {pos}")
-    # ASCII map rendering
     delay_print("\nMap:")
-    render_map()
+    render_map(show_npcs)
     input("\nPress Enter to return.")
 
     if previous_menu_function:
@@ -277,20 +317,30 @@ def show_map():
     else:
         title_screen()
 
-def render_map():
+def render_map(show_npcs=False):
     # Show a simple 11x11 grid centered around player position (0,0)
     grid_size = 11
     half = grid_size // 2
     px, py = game_state["position"]
 
+    # Build a lookup for suspect positions if showing NPCs
+    suspect_positions = {}
+    if show_npcs:
+        for idx, s in enumerate(game_state["suspects"], 1):
+            pos = s.get("position")
+            if pos:
+                suspect_positions.setdefault(pos, []).append(str(idx))
+
     for y in range(py - half, py + half + 1):
         row = ""
         for x in range(px - half, px + half + 1):
-            if (x,y) == (px, py):
-                # Player position
-                row += " @ "
-            elif (x,y) in game_state["visited_locations"]:
-                loc = game_state["visited_locations"][(x,y)]
+            if (x, y) == (px, py):
+                row += " @ "  # Player position
+            elif show_npcs and (x, y) in suspect_positions:
+                # Show all suspects at this position (as numbers)
+                row += " " + "".join(suspect_positions[(x, y)]) + " "
+            elif (x, y) in game_state["visited_locations"]:
+                loc = game_state["visited_locations"][(x, y)]
                 row += f" {loc[0]} "  # First letter of location
             else:
                 row += " . "
@@ -343,7 +393,11 @@ def handle_input(user_input, return_function):
     elif user_input == "quests":
         show_quests()
     elif user_input == "map":
-        show_map()
+        # Ask if user wants to show NPCs
+        clear()
+        print("Show NPCs on map? (y/n)")
+        show = input("> ").strip().lower()
+        show_map(show_npcs=(show == "y"))
     elif user_input == "stats":
         show_stats()
     else:
@@ -545,6 +599,59 @@ def describe_room():
         title_screen()
     else:
         handle_input(user_input, describe_room)
+
+def move_player():
+    global previous_menu_function
+    previous_menu_function = move_player
+    clear()
+
+    delay_print(f"Current location: {game_state['location']} at {game_state['position']}")
+    delay_print("Choose direction to move: N, S, E, W, NE, NW, SE, SW or 'back' to return.")
+    user_input = input("> ").strip().lower()
+
+    if user_input in ["back", "menu"]:
+        previous_menu_function = describe_room
+        describe_room()
+        return
+    elif user_input in direction_vectors:
+        dx, dy = direction_vectors[user_input]
+        new_x = game_state["position"][0] + dx
+        new_y = game_state["position"][1] + dy
+        new_pos = (new_x, new_y)
+
+        # Check or assign room
+        if new_pos in game_state["visited_locations"]:
+            new_location = game_state["visited_locations"][new_pos]
+        else:
+            new_location = random.choice(list(room_templates.keys()))
+            game_state["visited_locations"][new_pos] = new_location
+
+        # Update player state
+        game_state["position"] = new_pos
+        game_state["location"] = new_location
+
+        delay_print(f"You move {user_input.upper()} to {new_location}.")
+
+        # Move suspects
+        move_suspects()
+
+        # Check for suspects in the same room
+        suspects_here = [
+            s for s in game_state["suspects"]
+            if s.get("position") == game_state["position"]
+        ]
+        if suspects_here:
+            names = ', '.join(s["name"] for s in suspects_here)
+            delay_print(f"You see someone here: {names}")
+
+        input("Press Enter to continue.")
+        describe_room()
+    else:
+        delay_print("Invalid direction.")
+        input("Press Enter to continue.")
+        move_player()
+
+
 def interrogate_suspect():
     global previous_menu_function
     previous_menu_function = interrogate_suspect
@@ -611,6 +718,7 @@ def enter_manor():
     previous_menu_function = enter_manor
     clear()
     delay_print("You step into the manor, the scent of mildew thick in your nostrils. A shadow slips past the stairs, just at the edge of sight.")
+    input("Press Enter to continue.")
     character_creation()
 
 def character_creation():

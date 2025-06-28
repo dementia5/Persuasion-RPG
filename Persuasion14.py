@@ -297,7 +297,8 @@ def clear():
 def delay_print(s, speed=0.03):
     """Prints text slowly, but finishes instantly if the user presses space."""
     import msvcrt  # Windows only; for cross-platform, use 'getch' from 'getch' package
-
+    import threading
+    
     stop = [False]
 
     def check_space():
@@ -318,6 +319,8 @@ def delay_print(s, speed=0.03):
         print(c, end='', flush=True)
         time.sleep(speed)
     print()
+    stop[0] = True
+    thread.join(timeout=0.1)  # Clean up the thread
 
 def save_game():
     try:
@@ -325,6 +328,11 @@ def save_game():
         game_state_copy = game_state.copy()
         visited_serializable = {str(k): v for k, v in game_state["visited_locations"].items()}
         game_state_copy["visited_locations"] = visited_serializable
+
+         # Convert tuple keys in room_flavor_used to strings for JSON
+        if "room_flavor_used" in game_state:
+            flavor_serializable = {str(k): v for k, v in game_state["room_flavor_used"].items()}
+            game_state_copy["room_flavor_used"] = flavor_serializable
 
         # Convert sets to lists for JSON serialization
         if "walls" in game_state_copy:
@@ -812,14 +820,14 @@ def distort_text(text, sanity):
 
     if sanity >= 7:
         return text  # Clear
-    elif sanity >= 4:
+    elif sanity >= 5:
         # Mild distortion: jumble some words
         words = text.split()
         for i in range(len(words)):
             if random.random() < 0.3:
                 words[i] = jumble_word(words[i])
         return ' '.join(words)
-    elif sanity >= 3:
+    elif sanity >= 4:
         # Severe distortion: reverse words and jumble
         words = text.split()
         words = [jumble_word(w) for w in words[::-1]]
@@ -924,12 +932,21 @@ def describe_room():
     distorted = distort_text(desc, game_state["sanity"])
     delay_print(distorted)
 
-    # --- Flavor text logic (25% chance) ---
+    # --- Flavor text logic ---
     pos = game_state["position"]
     used = game_state.setdefault("room_flavor_used", {})
     used_indices = used.get(pos, [])
     available_indices = [i for i in range(len(flavor_text_pool)) if i not in used_indices]
-    if available_indices and random.random() < 0.25:
+
+    # Guarantee flavor text on first entry to Foyer at (0, 0)
+    if pos == (0, 0) and room == "Foyer" and not used_indices:
+        idx = random.choice(available_indices)
+        flavor = flavor_text_pool[idx]
+        delay_print(distort_text(flavor, game_state["sanity"]))
+        used.setdefault(pos, []).append(idx)
+        game_state["room_flavor_used"] = used
+    # Otherwise, use 25% chance as normal
+    elif available_indices and random.random() < 0.40:
         idx = random.choice(available_indices)
         flavor = flavor_text_pool[idx]
         delay_print(distort_text(flavor, game_state["sanity"]))
@@ -1169,9 +1186,11 @@ def character_creation():
     print("[3] Detective – +2 Perception")
     print("[4] Priest – +1 Faith, +1 Sanity")
     print("[5] Random character (auto-assign all stats)")
+    print("[6] Manual stat entry (debug)")  # <-- Add this line
 
     bg = input("> ")
     auto_assign = False
+    manual_entry = False
     if bg == "1" or bg.lower() == "theologian":
         game_state["background"] = "Theologian"
         game_state["faith"] += 2
@@ -1198,20 +1217,38 @@ def character_creation():
             game_state["faith"] += 1
             game_state["sanity"] += 1
         delay_print(f"Random background assigned: {game_state['background']}")
+    elif bg == "6" or bg.lower() == "manual":
+        manual_entry = True
+        game_state["background"] = "Debug"
     else:
         character_creation()
         return
 
-    # Assign base values and random bonus to all stats
-    for stat in ["faith", "sanity", "perception", "strength", "stamina", "agility", "comeliness"]:
-        base = 8 + random.randint(1, 4)
-        game_state[stat] = base
-
-    stat_points = 6
     stats_list = ["faith", "sanity", "perception", "strength", "stamina", "agility", "comeliness"]
 
-    if auto_assign:
+    if manual_entry:
+        print("\nEnter each stat value (between 3 and 18):")
+        for stat in stats_list:
+            while True:
+                try:
+                    val = int(input(f"{stat.capitalize()}: "))
+                    if 3 <= val <= 18:
+                        game_state[stat] = val
+                        break
+                    else:
+                        print("Value must be between 3 and 18.")
+                except ValueError:
+                    print("Please enter a valid number.")
+        print("\nManual stat entry complete.")
+        for stat in stats_list:
+            print(f"{stat.capitalize()}: {game_state[stat]}")
+        input("Press Enter to continue.")
+    elif auto_assign:
         # Randomly distribute 6 points among stats (max 18 per stat)
+        stat_points = 6
+        for stat in stats_list:
+            base = 8 + random.randint(1, 4)
+            game_state[stat] = base
         for _ in range(stat_points):
             available = [s for s in stats_list if game_state[s] < 18]
             if not available:
@@ -1223,42 +1260,11 @@ def character_creation():
             print(f"{stat.capitalize()}: {game_state[stat]}")
         input("Press Enter to continue.")
     else:
-        print("\nDistribute 6 additional points among your attributes (for a max of 18):")
-        while stat_points > 0:
-            print(f"\nPoints remaining: {stat_points}")
-            for idx, stat in enumerate(stats_list, 1):
-                print(f"[{idx}] {stat.capitalize()}: [{game_state[stat]}]")
+        # ...existing point-buy logic...
+        # (leave your current code here for normal stat assignment)
+        # ...
+        pass
 
-            chosen_stat = input("\nEnter the attribute to increase (name or number): ").strip().lower()
-            if chosen_stat.isdigit():
-                stat_idx = int(chosen_stat) - 1
-                if 0 <= stat_idx < len(stats_list):
-                    chosen_stat = stats_list[stat_idx]
-                else:
-                    print("Invalid stat number. Try again.")
-                    continue
-            elif chosen_stat not in stats_list:
-                print("Invalid stat name. Try again.")
-                continue
-
-            try:
-                add = int(input(f"How many points would you like to add to {chosen_stat.capitalize()}? (You have {stat_points} left): "))
-                if 0 <= add <= stat_points and game_state[chosen_stat] + add <= 18:
-                    game_state[chosen_stat] += add
-                    stat_points -= add
-                else:
-                    print("Invalid amount. Please enter a number within the remaining point range and stat limit.")
-            except ValueError:
-                print("Please enter a valid number.")
-
-        # Final confirmation
-        print("\nFinal attributes:")
-        for stat in stats_list:
-            print(f"{stat.capitalize()}: {game_state[stat]}")
-        confirm = input("Accept these stats? (Y/N): ").strip().lower()
-        if confirm != 'y':
-            character_creation()
-            return
     game_state["inventory"].append("Envelope from the Commissioner")
 
     initialize_suspects()
@@ -1266,15 +1272,14 @@ def character_creation():
     game_state["visited_locations"] = {(0, 0): "Foyer"}
     game_state["location"] = "Foyer"
     game_state["position"] = (0, 0)
-    generate_passages()  # <--- Add this line
+    generate_passages()
     delay_print(f"Welcome, {game_state['name']} the {game_state['background']}. The hour is late, and the shadows grow bold.")
     input("Press Enter to begin.")
 
     assign_clues_to_rooms()
     assign_potions_to_rooms()
 
-# Begin the first case
-
+    # Begin the first case
     start_first_case()
 
 def start_first_case():

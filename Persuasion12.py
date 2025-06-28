@@ -15,6 +15,16 @@ MAP_MAX = 7
 MAP_SIZE = MAP_MAX - MAP_MIN + 1  # 16
 MAP_CENTER = (MAP_SIZE // 2) - 1  # Center of the map grid
 
+DIRECTIONS = {
+    "n": (0, -1),
+    "s": (0, 1),
+    "e": (1, 0),
+    "w": (-1, 0),
+    "ne": (1, -1),
+    "nw": (-1, -1),
+    "se": (1, 1),
+    "sw": (-1, 1)
+}
 previous_menu_function = None
 
 valid_directions = {"n", "s", "e", "w", "ne", "nw", "se", "sw"}
@@ -123,23 +133,52 @@ room_templates = room_templates = {
 suspect_templates = [
     {"name": "Miss Vexley", "trait": "Nervous", "alibi": "Claims she was in the chapel praying."},
     {"name": "Dr. Lorn", "trait": "Stoic", "alibi": "Was tending the fire in the lounge."},
-    {"name": "Bishop Greaves", "trait": "Fanatical", "alibi": "Says he heard voices in the cellar."},
+    {"name": "Ulric", "trait": "Fanatical", "alibi": "Says he heard voices in the cellar."},
     {"name": "Colonel Catsup", "trait": "Charming", "alibi": "Claims he was entertaining guests all night."},
     {"name": "Lady Ashcroft", "trait": "Secretive", "alibi": "Insists she was alone in the solarium, reading."},
     {"name": "Mr. Blackwood", "trait": "Cynical", "alibi": "Claims he was repairing a broken window in the attic."}
 ]
 
-def generate_walls():
-    wall_chance = 0.18  # 18% chance for a wall between any two adjacent rooms
+# def generate_walls():
+#     wall_chance = 0.18  # 18% chance for a wall between any two adjacent rooms
+#     for x in range(MAP_MIN, MAP_MAX + 1):
+#         for y in range(MAP_MIN, MAP_MAX + 1):
+#             for dx, dy in [(0, 1), (1, 0)]:  # Only need to check E and S to avoid duplicates
+#                 nx, ny = x + dx, y + dy
+#                 if MAP_MIN <= nx <= MAP_MAX and MAP_MIN <= ny <= MAP_MAX:
+#                     if random.random() < wall_chance:
+#                         # Store both directions for easy lookup
+#                         game_state["walls"].add(((x, y), (nx, ny)))
+#                         game_state["walls"].add(((nx, ny), (x, y)))
+
+def generate_passages():
+    """Generate a procedural map where each room has at most 4 exits, and all passages are consistent."""
+    passages = {}
     for x in range(MAP_MIN, MAP_MAX + 1):
         for y in range(MAP_MIN, MAP_MAX + 1):
-            for dx, dy in [(0, 1), (1, 0)]:  # Only need to check E and S to avoid duplicates
+            pos = (x, y)
+            possible_dirs = []
+            for dir_name, (dx, dy) in DIRECTIONS.items():
                 nx, ny = x + dx, y + dy
                 if MAP_MIN <= nx <= MAP_MAX and MAP_MIN <= ny <= MAP_MAX:
-                    if random.random() < wall_chance:
-                        # Store both directions for easy lookup
-                        game_state["walls"].add(((x, y), (nx, ny)))
-                        game_state["walls"].add(((nx, ny), (x, y)))
+                    possible_dirs.append(dir_name)
+            # Limit to 4 random directions per room
+            exits = random.sample(possible_dirs, min(4, len(possible_dirs)))
+            passages[pos] = set(exits)
+
+    # Make passages consistent (if A->B, then B->A)
+    for (x, y), dirs in passages.items():
+        for dir_name in list(dirs):
+            dx, dy = DIRECTIONS[dir_name]
+            nx, ny = x + dx, y + dy
+            rev_dir = None
+            for d, (ddx, ddy) in DIRECTIONS.items():
+                if (ddx, ddy) == (-dx, -dy):
+                    rev_dir = d
+                    break
+            if rev_dir:
+                passages.setdefault((nx, ny), set()).add(rev_dir)
+    game_state["passages"] = passages
 
 def initialize_suspects():
     game_state["suspects"] = random.sample(suspect_templates, 4)
@@ -266,24 +305,22 @@ def load_game():
 
 def move_to_new_room(direction=None):
     x, y = game_state["position"]
-    moves = {
-        "n": (0, -1),
-        "s": (0, 1),
-        "e": (1, 0),
-        "w": (-1, 0),
-        "ne": (1, -1),
-        "nw": (-1, -1),
-        "se": (1, 1),
-        "sw": (-1, 1)
-    }
-    if direction not in moves:
-        direction = random.choice(list(moves.keys()))
-    dx, dy = moves[direction]
+    if direction not in DIRECTIONS:
+        direction = random.choice(list(DIRECTIONS.keys()))
+    dx, dy = DIRECTIONS[direction]
     new_x, new_y = x + dx, y + dy
 
-    # Wall check
-    if ((x, y), (new_x, new_y)) in game_state["walls"]:
-        delay_print("A wall blocks your way. You cannot go that direction.")
+    # Grid bounds check
+    if not (MAP_MIN <= new_x <= MAP_MAX and MAP_MIN <= new_y <= MAP_MAX):
+        delay_print("You sense an unnatural barrier. The manor does not extend further in that direction.")
+        input("Press Enter to continue.")
+        describe_room()
+        return
+
+    # Passage check
+    allowed_dirs = game_state["passages"].get((x, y), set())
+    if direction not in allowed_dirs:
+        delay_print("A wall or locked door blocks your way. You cannot go that direction.")
         input("Press Enter to continue.")
         describe_room()
         return
@@ -372,6 +409,58 @@ def show_quests():
     else:
         title_screen()
 
+    print("\nWhat would you like to do?")
+    print("[1] Search the room")
+    print("[2] Move to another location")
+    print("[3] Show map")
+    print("[4] Check journal")
+    print("[5] Check inventory")
+    if suspects_here:
+        print("[6] Interrogate suspect")
+    print("[7] Attempt case resolution")
+    print("[8] Save game")
+    print("[9] Quit to title")
+
+    x, y = game_state["position"]
+    available_exits = [d.upper() for d in game_state["passages"].get((x, y), set())]
+    if available_exits:
+        print(f"\nThere are exits: {', '.join(available_exits)}")
+    else:
+        print("\nThere are no available exits from this room.")
+
+    user_input = input("> ").strip().lower()
+    if user_input == "1":
+        add_random_clue()
+        describe_room()
+    elif user_input == "2":
+        clear()
+        print("Where would you like to go? (N, S, E, W, NE, NW, SE, SW)")
+        dir_input = input("> ").strip().lower()
+        if dir_input in ["n","s","e","w","ne","nw","se","sw"]:
+            move_to_new_room(dir_input)
+        else:
+            delay_print("Unknown direction. Please enter a valid compass direction.")
+            input("Press Enter to continue.")
+            describe_room()
+    elif user_input == "3":
+        show_map()
+        describe_room()
+    elif user_input == "4":
+        show_journal()
+    elif user_input == "5":
+        show_inventory()
+    elif user_input == "6" and suspects_here:
+        interrogate_suspect()
+    elif user_input == "7":
+        case_resolution()
+    elif user_input == "8" or user_input == "save":
+        save_game()
+        describe_room()
+    elif user_input == "9" or user_input == "quit":
+        title_screen()
+    else:
+        handle_input(user_input, describe_room)
+
 def show_map():
     clear()
     location = game_state["location"]
@@ -380,16 +469,11 @@ def show_map():
     delay_print("\nMap:")
     # Prompt for NPC toggle
     show_npcs = False
-    choice = input("Show suspects on map? (Y/N): ").strip().lower()
+    choice = input("Show suspects on map? (y/n): ").strip().lower()
     if choice == "y":
         show_npcs = True
     render_map(show_npcs)
     input("\nPress Enter to return.")
-
-    if previous_menu_function:
-        previous_menu_function()
-    else:
-        title_screen()
 
 def render_map(show_npcs=False):
     # Show a simple 11x11 grid centered around player position
@@ -424,10 +508,36 @@ def show_inventory():
     clear()
     delay_print("Inventory:")
     if game_state["inventory"]:
-        delay_print(", ".join(game_state["inventory"]))
+        for idx, item in enumerate(game_state["inventory"], 1):
+            print(f"[{idx}] {item}")
+        print(f"[{len(game_state['inventory'])+1}] Return")
+        choice = input("\nSelect an item to inspect or return: ").strip()
+        if choice.isdigit():
+            idx = int(choice) - 1
+            if 0 <= idx < len(game_state["inventory"]):
+                item = game_state["inventory"][idx]
+                if item == "Envelope from the Commissioner":
+                    delay_print(
+                        f"""
+I hope this finds you well, {game_state['name']}.
+Bishop Alaric Greaves—a powerful, controversial cleric known for firebrand sermons and rumored secret rites—is missing from his chapel. No one saw him die, yet all the suspects were seen gathering at the mansion you now occupy. His final sermon spoke of a great awakening, and since then, strange phenomena have crept through the manor grounds and the city itself.
+
+You, {game_state['name']}, are to be my cloaked investigator. Unravel the truth—was it murder, madness, or something... worse?
+
+— Commissioner of Police of the Metropolis
+                        """)
+                    input("\nPress Enter to return.")
+                else:
+                    delay_print(f"You inspect the {item}.")
+                    input("\nPress Enter to return.")
+                show_inventory()
+            else:
+                return
+        else:
+            return
     else:
         delay_print("Your inventory is empty.")
-    input("\nPress Enter to return.")
+        input("\nPress Enter to return.")
 
     if previous_menu_function:
         previous_menu_function()
@@ -460,13 +570,13 @@ def handle_input(user_input, return_function):
             title_screen()
     elif user_input == "title":
         title_screen()
-    elif user_input == "inventory":
+    elif user_input == "inventory" or user_input == "i":
         show_inventory()
-    elif user_input == "journal":
+    elif user_input == "journal" or user_input == "j":
         show_journal()
-    elif user_input == "quests":
+    elif user_input == "quests" or user_input == "mystery":
         show_quests()
-    elif user_input == "map":
+    elif user_input == "map" or user_input == "m":
         show_map()
     elif user_input == "stats":
         show_stats()
@@ -476,15 +586,16 @@ def handle_input(user_input, return_function):
 
 def show_help():
     delay_print("Available commands:")
+    delay_print("- help: Show this help message")
+    delay_print("- look [l]: Look around the current location")
     delay_print("- save: Save your game")
     delay_print("- load: Load a previous save")
     delay_print("- quit: Quit the game")
     delay_print("- back/menu: Return to the previous menu")
     delay_print("- title: Return to the title screen")
-    delay_print("- inventory: Show your inventory")
-    delay_print("- journal: Show your journal entries")
-    delay_print("- quests: Show active quests")
-    delay_print("- map: Show current location")
+    delay_print("- inventory [i]: Show your inventory")
+    delay_print("- journal [j]: Show your journal entries")
+    delay_print("- quests/mystery: Show active quests")
     delay_print("- stats: Show character stats")
     delay_print("- n/s/e/w/ne/nw/se/sw: Move in that direction from any screen")
     input("\nPress Enter to return.")
@@ -643,15 +754,41 @@ def describe_room():
     distorted = distort_text(desc, game_state["sanity"])
     delay_print(distorted)
 
+    # Check if any suspect is present in the current room
+    suspects_here = [
+        s for s in game_state["suspects"]
+        if s.get("position") == game_state["position"]
+    ]
+
+    # Count interrogated suspects (by journal entry)
+    interrogated_count = sum(
+        1 for s in game_state["suspects"]
+        if any(f"You confront {s['name']}" in entry or f"Survived combat against {s['name']}" in entry for entry in game_state["journal"])
+    )
+
     print("\nWhat would you like to do?")
     print("[1] Search the room")
     print("[2] Move to another location")
-    print("[3] Check journal")
-    print("[4] Check inventory")
-    print("[5] Interrogate suspect")
-    print("[6] Attempt case resolution")
-    print("[7] Save game")
-    print("[8] Quit to title")
+    print("[3] Show map")
+    print("[4] Check journal")
+    print("[5] Check inventory")
+    if suspects_here:
+        print("[6] Interrogate suspect")
+    # Only show case resolution if at least 5 clues and 2 suspects interrogated
+    if len(game_state["clues"]) >= 5 and interrogated_count >= 2:
+        print("[7] Attempt case resolution")
+        case_resolution_available = True
+    else:
+        case_resolution_available = False
+    print("[8] Save game")
+    print("[9] Quit to title")
+
+    x, y = game_state["position"]
+    available_exits = [d.upper() for d in game_state["passages"].get((x, y), set())]
+    if available_exits:
+        print(f"\nThere are exits: {', '.join(available_exits)}")
+    else:
+        print("\nThere are no available exits from this room.")
 
     user_input = input("> ").strip().lower()
     if user_input == "1":
@@ -668,17 +805,20 @@ def describe_room():
             input("Press Enter to continue.")
             describe_room()
     elif user_input == "3":
-        show_journal()
+        show_map()
+        describe_room()
     elif user_input == "4":
-        show_inventory()
+        show_journal()
     elif user_input == "5":
+        show_inventory()
+    elif user_input == "6" and suspects_here:
         interrogate_suspect()
-    elif user_input == "6":
+    elif user_input == "7" and case_resolution_available:
         case_resolution()
-    elif user_input == "7" or user_input == "save":
+    elif user_input == "8" or user_input == "save":
         save_game()
         describe_room()
-    elif user_input == "8" or user_input == "quit":
+    elif user_input == "9" or user_input == "quit":
         title_screen()
     else:
         handle_input(user_input, describe_room)
@@ -686,24 +826,34 @@ def describe_room():
 def interrogate_suspect():
     global previous_menu_function
     previous_menu_function = interrogate_suspect
-    suspects = game_state["suspects"]
+    # Only suspects in the current room
+    suspects_here = [
+        s for s in game_state["suspects"]
+        if s.get("position") == game_state["position"]
+    ]
+    if not suspects_here:
+        delay_print("There is no one here to interrogate.")
+        input("Press Enter to continue.")
+        describe_room()
+        return
+
     clear()
     print("\nChoose someone to interrogate:")
-    for i, s in enumerate(suspects):
+    for i, s in enumerate(suspects_here):
         print(f"[{i+1}] {s['name']} – {s['trait']}")
-    print(f"[{len(suspects)+1}] Return")
+    print(f"[{len(suspects_here)+1}] Return")
 
     user_input = input("> ").strip().lower()
     if user_input.isdigit():
         idx = int(user_input) - 1
-        if 0 <= idx < len(suspects):
-            suspect = suspects[idx]
+        if 0 <= idx < len(suspects_here):
+            suspect = suspects_here[idx]
             clear()
             delay_print(f"You confront {suspect['name']}.")
             delay_print(suspect["alibi"])
             input("Press Enter to continue.")
             describe_room()
-        elif idx == len(suspects):
+        elif idx == len(suspects_here):
             describe_room()
         else:
             delay_print("Invalid choice.")
@@ -765,8 +915,10 @@ def character_creation():
     print("[2] Occultist – +2 Sanity")
     print("[3] Detective – +2 Perception")
     print("[4] Ex-Priest – +1 Faith, +1 Sanity")
+    print("[5] Random character (auto-assign all stats)")
 
     bg = input("> ")
+    auto_assign = False
     if bg == "1" or bg.lower() == "theologian":
         game_state["background"] = "Theologian"
         game_state["faith"] += 2
@@ -780,6 +932,19 @@ def character_creation():
         game_state["background"] = "Ex-Priest"
         game_state["faith"] += 1
         game_state["sanity"] += 1
+    elif bg == "5" or bg.lower() == "random":
+        auto_assign = True
+        game_state["background"] = random.choice(["Theologian", "Occultist", "Detective", "Ex-Priest"])
+        if game_state["background"] == "Theologian":
+            game_state["faith"] += 2
+        elif game_state["background"] == "Occultist":
+            game_state["sanity"] += 2
+        elif game_state["background"] == "Detective":
+            game_state["perception"] += 2
+        elif game_state["background"] == "Ex-Priest":
+            game_state["faith"] += 1
+            game_state["sanity"] += 1
+        delay_print(f"Random background assigned: {game_state['background']}")
     else:
         character_creation()
         return
@@ -789,53 +954,66 @@ def character_creation():
         base = 8 + random.randint(1, 4)
         game_state[stat] = base
 
-     # Allow player to distribute 6 additional points
     stat_points = 6
     stats_list = ["faith", "sanity", "perception", "strength", "stamina", "agility", "comeliness"]
-    print("\nDistribute 6 additional points among your attributes (for a max of 18):")
-    while stat_points > 0:
-        print(f"\nPoints remaining: {stat_points}")
-        for idx, stat in enumerate(stats_list, 1):
-            print(f"[{idx}] {stat.capitalize()}: [{game_state[stat]}]")
 
-        chosen_stat = input("\nEnter the attribute to increase (name or number): ").strip().lower()
-        if chosen_stat.isdigit():
-            stat_idx = int(chosen_stat) - 1
-            if 0 <= stat_idx < len(stats_list):
-                chosen_stat = stats_list[stat_idx]
-            else:
-                print("Invalid stat number. Try again.")
+    if auto_assign:
+        # Randomly distribute 6 points among stats (max 18 per stat)
+        for _ in range(stat_points):
+            available = [s for s in stats_list if game_state[s] < 18]
+            if not available:
+                break
+            chosen_stat = random.choice(available)
+            game_state[chosen_stat] += 1
+        print("\nRandomly assigned attributes:")
+        for stat in stats_list:
+            print(f"{stat.capitalize()}: {game_state[stat]}")
+        input("Press Enter to continue.")
+    else:
+        print("\nDistribute 6 additional points among your attributes (for a max of 18):")
+        while stat_points > 0:
+            print(f"\nPoints remaining: {stat_points}")
+            for idx, stat in enumerate(stats_list, 1):
+                print(f"[{idx}] {stat.capitalize()}: [{game_state[stat]}]")
+
+            chosen_stat = input("\nEnter the attribute to increase (name or number): ").strip().lower()
+            if chosen_stat.isdigit():
+                stat_idx = int(chosen_stat) - 1
+                if 0 <= stat_idx < len(stats_list):
+                    chosen_stat = stats_list[stat_idx]
+                else:
+                    print("Invalid stat number. Try again.")
+                    continue
+            elif chosen_stat not in stats_list:
+                print("Invalid stat name. Try again.")
                 continue
-        elif chosen_stat not in stats_list:
-            print("Invalid stat name. Try again.")
-            continue
 
-        try:
-            add = int(input(f"How many points would you like to add to {chosen_stat.capitalize()}? (You have {stat_points} left): "))
-            if 0 <= add <= stat_points:
-                game_state[chosen_stat] += add
-                stat_points -= add
-            else:
-                print("Invalid amount. Please enter a number within the remaining point range.")
-        except ValueError:
-            print("Please enter a valid number.")
+            try:
+                add = int(input(f"How many points would you like to add to {chosen_stat.capitalize()}? (You have {stat_points} left): "))
+                if 0 <= add <= stat_points and game_state[chosen_stat] + add <= 18:
+                    game_state[chosen_stat] += add
+                    stat_points -= add
+                else:
+                    print("Invalid amount. Please enter a number within the remaining point range and stat limit.")
+            except ValueError:
+                print("Please enter a valid number.")
 
-    # Final confirmation
-    print("\nFinal attributes:")
-    for stat in ["faith", "sanity", "perception", "strength", "stamina", "agility", "comeliness"]:
-        print(f"{stat.capitalize()}: {game_state[stat]}")
-
-    confirm = input("Accept these stats? (Y/N): ").strip().lower()
-    if confirm != 'y':
-        character_creation()
-        return
+        # Final confirmation
+        print("\nFinal attributes:")
+        for stat in stats_list:
+            print(f"{stat.capitalize()}: {game_state[stat]}")
+        confirm = input("Accept these stats? (Y/N): ").strip().lower()
+        if confirm != 'y':
+            character_creation()
+            return
+    game_state["inventory"].append("Envelope from the Commissioner")
 
     initialize_suspects()
     # Mark starting location visited at (0,0)
     game_state["visited_locations"] = {(0, 0): "Foyer"}
     game_state["location"] = "Foyer"
     game_state["position"] = (0, 0)
-    generate_walls()  # <--- Add this line
+    generate_passages()  # <--- Add this line
     delay_print(f"Welcome, {game_state['name']} the {game_state['background']}. The hour is late, and the shadows grow bold.")
     input("Press Enter to begin.")
     start_first_case()
