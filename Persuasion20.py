@@ -7,6 +7,7 @@ import random
 import json
 import sys
 import threading
+import msvcrt  # For Windows key detection
 
 # --- Global State ---
 
@@ -19,15 +20,11 @@ DIRECTIONS = {
     "n": (0, -1),
     "s": (0, 1),
     "e": (1, 0),
-    "w": (-1, 0),
-    "ne": (1, -1),
-    "nw": (-1, -1),
-    "se": (1, 1),
-    "sw": (-1, 1)
+    "w": (-1, 0)
 }
 previous_menu_function = None
 
-valid_directions = {"n", "s", "e", "w", "ne", "nw", "se", "sw"}
+valid_directions = {"n", "s", "e", "w"}
 
 game_state = {
     "name": "",
@@ -50,6 +47,8 @@ game_state = {
     "turns": 0,
     "visited_locations": {},
     "position": (0, 0),
+    "score": 0,
+    "score_log": [],
 #    "walls": set(),  # Each wall is ((x1, y1), (x2, y2))
 }
 
@@ -57,6 +56,19 @@ game_state["persuasion_active"] = False
 game_state["persuasion_rounds"] = 0
 game_state["persuasion_uses"] = 0
 game_state["persuasion_targets"] = set()
+
+# game_state["score"] += 10
+# game_state["score_log"].append(f"Clue: {clue} [+10]")
+# game_state["score"] += 20
+# game_state["score_log"].append(f"Artifact: {artifact['name']} [+20]")
+# game_state["score"] += 15
+# game_state["score_log"].append(f"Interrogated: {suspect['name']} [+15]")
+# game_state["score"] += 100
+# game_state["score_log"].append("Case Solved [+100]")
+# game_state["score"] -= 1
+# game_state["score_log"].append("Turn taken [-1]")
+
+
 
 room_templates = room_templates = {
     "Foyer": [
@@ -172,7 +184,11 @@ def generate_passages():
                 if MAP_MIN <= nx <= MAP_MAX and MAP_MIN <= ny <= MAP_MAX:
                     possible_dirs.append(dir_name)
             # Limit to 4 random directions per room
-            exits = random.sample(possible_dirs, min(4, len(possible_dirs)))
+            num_exits = min(len(possible_dirs), random.randint(2, 3))
+            if num_exits > 0:
+                exits = random.sample(possible_dirs, num_exits)
+            else:
+                exits = []
             passages[pos] = set(exits)
 
     # Make passages consistent (if A->B, then B->A), but do not exceed 4 exits per room
@@ -194,6 +210,26 @@ def generate_passages():
                     # If neighbor already has 4 exits, remove this exit from the original room to maintain consistency
                     passages[(x, y)].discard(dir_name)
     game_state["passages"] = passages
+
+def auto_generate_walls_and_doors():
+    # Clear any existing walls/doors
+    game_state["walls"] = set()
+    game_state["locked_doors"] = set()
+    for (x, y), exits in game_state["passages"].items():
+        for dir_name, (dx, dy) in DIRECTIONS.items():
+            nx, ny = x + dx, y + dy
+            neighbor = (nx, ny)
+            # Only check cardinal directions for walls/doors
+            if dir_name in {"n", "s", "e", "w"} and MAP_MIN <= nx <= MAP_MAX and MAP_MIN <= ny <= MAP_MAX:
+                # If there is NO passage in this direction, add a wall
+                if dir_name not in exits:
+                    # Example: you could randomly make some of these locked doors
+                    if random.random() < 0.15:
+                        game_state["locked_doors"].add(((x, y), neighbor))
+                        game_state["locked_doors"].add((neighbor, (x, y)))
+                    else:
+                        game_state["walls"].add(((x, y), neighbor))
+                        game_state["walls"].add((neighbor, (x, y)))
 
 def initialize_suspects():
     game_state["suspects"] = random.sample(suspect_templates, 4)
@@ -264,6 +300,150 @@ clue_motives = {
 
 clue_locations = {}
 
+elder_sign = {
+    "name": "Elder Sign",
+    "effect": "faith",
+    "amount": 3,
+    "desc": (
+        "A strange, star-shaped talisman carved from ancient stone. "
+        "Its lines twist in impossible angles, and the air around it feels subtly warped. "
+        "Legends say it wards off the Old Ones and brings strength to the faithful."
+    )
+}
+
+scrying_lens = {
+    "name": "Scrying Lens",
+    "desc": (
+        "A cloudy crystal lens set in tarnished silver. When held to the eye, it reveals the hidden movements of those who dwell within the manor."
+    )
+}
+
+artifact_pool = [
+    {
+        "name": "Silver Crucifix",
+        "desc": "An ornate cross, tarnished with age. It seems to pulse with a faint warmth.",
+        "effect": "faith",
+        "amount": "+1"
+    },
+    {
+        "name": "Occult Grimoire",
+        "desc": "A leather-bound tome filled with forbidden rites and sigils.",
+        "effect": "perception",
+        "amount": "+1",
+        "side_effect": ("sanity", -1)
+    },
+    {
+        "name": "Monocle of Insight",
+        "desc": "A finely crafted monocle that seems to shimmer with hidden knowledge.",
+        "effect": "perception",
+        "amount": "+2"
+    },
+    {
+        "name": "Vial of Laudanum",
+        "desc": "A small bottle of opiate tincture, used to calm nerves.",
+        "effect": "sanity",
+        "amount": "+3",
+        "side_effect": ("perception", -1)
+    },
+    {
+        "name": "Silver Dagger",
+        "desc": "A ritual blade, cold to the touch.",
+        "effect": "strength",
+        "amount": "+2"
+    },
+    {
+        "name": "Brass Spyglass",
+        "desc": "An extendable spyglass, engraved with arcane symbols.",
+        "effect": "clue",
+        "amount": 1  # Reveal a random clue
+    },
+    {
+        "name": "Sealed Letter",
+        "desc": "A wax-sealed envelope, addressed in a trembling hand.",
+        "effect": "quest",
+        "amount": 1  # Triggers a side quest or clue
+    },
+    {
+        "name": "Tarot Deck",
+        "desc": "A deck of cards with unsettling illustrations.",
+        "effect": "hint",
+        "amount": 1,  # Gain a hint, risk sanity
+        "side_effects": ("sanity", -1)
+    },
+    {
+        "name": "Ritual Candle",
+        "desc": "A black candle that never seems to burn down.",
+        "effect": "secret",
+        "amount": 1  # Reveal a secret
+    },
+    {
+        "name": "Whispering Skull",
+        "desc": "A small skull that sometimes murmurs in forgotten tongues.",
+        "effect": "random",
+        "amount": 1  # Random effect: clue, sanity loss, or hint
+    },
+    {
+        "name": "Tattered Map",
+        "desc": "A hand-drawn map with cryptic markings.",
+        "effect": "shortcut",
+        "amount": 1  # Reveals a hidden room or shortcut
+    },
+    {
+        "name": "Bishop’s Signet Ring",
+        "desc": "A heavy gold ring engraved with ecclesiastical symbols.",
+        "effect": "puzzle",
+        "amount": 1  # Needed for certain endings or puzzles
+    },
+    {
+        "name": "Phial of Holy Water",
+        "desc": "A glass vial filled with water that glows faintly.",
+        "effect": "repel",
+        "amount": 1  # Repel or weaken supernatural enemies
+    },
+    {
+        "name": "Pocket Watch",
+        "desc": "An elegant watch that ticks erratically in certain rooms.",
+        "effect": "warn",
+        "amount": 1  # Warns of danger or time-sensitive events
+    },
+    {
+        "name": "Candle Snuffer",
+        "desc": "A silver tool for extinguishing candles, oddly cold to the touch.",
+        "effect": "ritual",
+        "amount": 1  # Use in rituals or to solve a puzzle
+    },
+    {
+        "name": "Bloodstained Handkerchief",
+        "desc": "Monogrammed, with a faint scent of perfume.",
+        "effect": "clue",
+        "amount": 1  # Clue or evidence for a suspect
+    },
+    {
+        "name": "Strange Key",
+        "desc": "An oddly-shaped key that doesn’t fit any known lock.",
+        "effect": "unlock",
+        "amount": 1  # Opens a secret passage or room
+    }
+]
+
+def assign_elder_sign_to_room():
+    """Assign the Elder Sign to a random unique room at game start."""
+    possible_rooms = list(room_templates.keys())
+    random.shuffle(possible_rooms)
+    # Avoid placing in Foyer or starting room
+    for room in possible_rooms:
+        if room != "Foyer":
+            game_state["elder_sign_room"] = room
+            break
+
+def assign_scrying_lens_to_room():
+    possible_rooms = list(room_templates.keys())
+    random.shuffle(possible_rooms)
+    for room in possible_rooms:
+        if room != "Foyer" and room != game_state.get("elder_sign_room"):
+            game_state["scrying_lens_room"] = room
+            break
+
 # Potions to be scattered
 potion_pool = [
     {"name": "Potion of Strength", "effect": "strength", "amount": 2, "desc": "A crimson tonic that invigorates the muscles."},
@@ -290,6 +470,16 @@ def assign_clues_to_rooms():
     random.shuffle(possible_rooms)
     for clue, room in zip(clue_pool, possible_rooms):
         clue_locations[room] = clue
+
+def assign_artifacts_to_rooms():
+    possible_rooms = [r for r in room_templates.keys() if r != "Foyer"]
+    random.shuffle(possible_rooms)
+    # Randomly select 6 unique artifacts for this playthrough
+    available_artifacts = random.sample(artifact_pool, 6)
+    artifact_locations = {}
+    for artifact, room in zip(available_artifacts, possible_rooms):
+        artifact_locations[room] = artifact
+    game_state["artifact_locations"] = artifact_locations
 
 def reset_game_state():
     # Clear all mutable game state for a fresh start
@@ -358,9 +548,10 @@ def save_game():
             game_state_copy["room_flavor_used"] = flavor_serializable
 
         # Convert sets to lists for JSON serialization
-        for key in ["breadcrumbs", "persuasion_targets"]:
+        for key in ["breadcrumbs", "persuasion_targets", "walls", "locked_doors"]:
             if key in game_state_copy and isinstance(game_state_copy[key], set):
-                game_state_copy[key] = list(game_state_copy[key])
+                # Convert tuples inside the set to lists for JSON
+                game_state_copy[key] = [list(item) for item in game_state_copy[key]]
 
         # Convert passages dict of sets to dict of lists
         if "passages" in game_state_copy:
@@ -413,16 +604,23 @@ def load_game():
                         flavor[key] = value
                 loaded_state["room_flavor_used"] = flavor
 
-            # Convert lists back to sets for breadcrumbs, persuasion_targets
-            for key in ["breadcrumbs", "persuasion_targets"]:
-                if key in loaded_state and isinstance(loaded_state[key], list):
-                    loaded_state[key] = set(to_tuple(item) for item in loaded_state[key])
+            # Convert lists back to sets of tuples for breadcrumbs, persuasion_targets, walls, locked_doors
+            for key in ["breadcrumbs", "persuasion_targets", "walls", "locked_doors"]:
+                if key in loaded_state:
+                    if isinstance(loaded_state[key], list):
+                        loaded_state[key] = set(to_tuple(item) for item in loaded_state[key])
+                    elif isinstance(loaded_state[key], set):
+                        loaded_state[key] = set(to_tuple(item) for item in loaded_state[key])
+                    else:
+                        loaded_state[key] = set()
+                else:
+                    loaded_state[key] = set()
 
             # Ensure breadcrumbs exists and is a set of tuples
             if "breadcrumbs" not in loaded_state or not isinstance(loaded_state["breadcrumbs"], set):
                 loaded_state["breadcrumbs"] = set()
             else:
-                loaded_state["breadcrumbs"] = set(to_tuple(item) for item in loaded_state["breadcrumbs"])
+                loaded_state["breadcrumbs"] = set(tuple(item) for item in loaded_state["breadcrumbs"])
 
             # Convert position from list to tuple
             if "position" in loaded_state and isinstance(loaded_state["position"], list):
@@ -447,17 +645,13 @@ def load_game():
         input("\nPress Enter to return.")
         title_screen()
         
-def move_to_new_room(direction=None):
+def move_to_new_room(direction=None, show_room=True):
     x, y = game_state["position"]
     moves = {
         "n": (0, -1),
         "s": (0, 1),
         "e": (1, 0),
-        "w": (-1, 0),
-        "ne": (1, -1),
-        "nw": (-1, -1),
-        "se": (1, 1),
-        "sw": (-1, 1)
+        "w": (-1, 0)
     }
     if direction not in moves:
         direction = random.choice(list(moves.keys()))
@@ -478,8 +672,23 @@ def move_to_new_room(direction=None):
         describe_room()
         return
 
+    # --- NEW: Block movement through walls and locked doors ---
+    walls = game_state.get("walls", set())
+    locked_doors = game_state.get("locked_doors", set())
+    pos = (x, y)
     new_pos = (new_x, new_y)
+    if ((pos, new_pos) in walls) or ((pos, new_pos) in locked_doors):
+        delay_print("A wall or locked door blocks your way.")
+        input("Press Enter to continue.")
+        describe_room()
+        return
+
     game_state["position"] = new_pos
+
+    # Mark this room as visited in breadcrumbs
+    if "breadcrumbs" not in game_state or not isinstance(game_state["breadcrumbs"], set):
+        game_state["breadcrumbs"] = set()
+    game_state["breadcrumbs"].add(new_pos)
 
     # Assign a new or existing location name for new_pos
     if new_pos not in game_state["visited_locations"]:
@@ -499,8 +708,10 @@ def move_to_new_room(direction=None):
         names = ', '.join(s["name"] for s in suspects_here)
         delay_print(f"You see someone here: {names}")
 
-    input("Press Enter to enter the new room.")
-    describe_room()
+    if show_room:
+        input("Press Enter to enter the new room.")
+        game_state["score"] -= 1  # Encourage efficiency
+        describe_room()
 
 def move_suspects():
     """Move each suspect to a random adjacent visited room, or let them stand still for 1-2 turns."""
@@ -560,17 +771,22 @@ def show_journal():
     clear()
     delay_print("Journal Entries:")
     clues = [entry for entry in game_state["journal"] if entry.startswith("CLUE FOUND")]
-    responses = [entry for entry in game_state["journal"] if not entry.startswith("CLUE FOUND")]
+    artifacts = [entry for entry in game_state["journal"] if entry.startswith("ARTIFACT FOUND")]
+    responses = [entry for entry in game_state["journal"] if not entry.startswith("CLUE FOUND") and not entry.startswith("ARTIFACT FOUND")]
 
     if clues:
         delay_print("\n--- Clues Discovered ---")
         for entry in clues:
             delay_print(entry)
+    if artifacts:
+        delay_print("\n--- Artifacts Discovered ---")
+        for entry in artifacts:
+            delay_print(entry)
     if responses:
         delay_print("\n--- Suspect Responses ---")
         for entry in responses:
             delay_print(entry)
-    if not clues and not responses:
+    if not clues and not artifacts and not responses:
         delay_print("Your journal is empty.")
     input("\nPress Enter to return.")
     if previous_menu_function:
@@ -615,10 +831,10 @@ def show_quests():
     user_input = input("> ").strip().lower()
     if user_input == "1":
         add_random_clue()
-        describe_room()
+        # describe_room()
     elif user_input == "2":
         clear()
-        print("Where would you like to go? (N, S, E, W, NE, NW, SE, SW)")
+        print("Where would you like to go? (N, S, E, W)")
         dir_input = input("> ").strip().lower()
         if dir_input in ["n","s","e","w","ne","nw","se","sw"]:
             move_to_new_room(dir_input)
@@ -628,10 +844,10 @@ def show_quests():
             describe_room()
     elif user_input == "3":
         show_map()
-        describe_room()
-    elif user_input == "4":
+        # describe_room()
+    elif user_input == "4" or user_input == "journal" or user_input == "j":
         show_journal()
-    elif user_input == "5":
+    elif user_input == "5" or user_input == "inventory" or user_input == "i":
         show_inventory()
     elif user_input == "6" and suspects_here:
         interrogate_suspect()
@@ -645,31 +861,41 @@ def show_quests():
     else:
         handle_input(user_input, describe_room)
 
+
 def show_map():
     clear()
     location = game_state["location"]
     pos = game_state["position"]
-    delay_print(f"Current Location: {location} at {pos}")
+    print(f"Current Location: {location} at {pos}")
+    look_around(pause=False)  # Show short description under current location
+
     delay_print("\nMap:")
 
-    # Ask only once for NPC and breadcrumb preferences
-    if "show_npcs" not in game_state:
-        choice = input("Show suspects on map? (Y/N): ").strip().lower()
-        game_state["show_npcs"] = (choice == "y")
-    if "show_breadcrumbs" not in game_state:
-        choice = input("Show breadcrumbs (visited rooms) on map? (Y/N): ").strip().lower()
-        game_state["show_breadcrumbs"] = (choice == "y")
+    # Only ask for fog of war toggle once per session
+    if "fog_of_war" not in game_state:
+        choice = input("Show only visited rooms/walls on map (fog of war)? (Y/N): ").strip().lower()
+        game_state["fog_of_war"] = (choice == "y")
 
-    render_map(game_state["show_npcs"], game_state["show_breadcrumbs"])
-    input("\nPress Enter to return.")
+    show_npcs = game_state.get("can_see_npcs", False)
+    render_map(show_npcs, fog_of_war=game_state.get("fog_of_war", False))
 
-    # Return to previous menu or describe_room
-    if previous_menu_function:
-        previous_menu_function()
+    print("\nType a direction (N/S/E/W) and press Enter to move, or just press Enter to return to the action menu.")
+
+    user_input = input("> ").strip().lower()
+    if user_input == "":
+        if previous_menu_function:
+            previous_menu_function()
+        else:
+            describe_room()
+        return
+    elif user_input in valid_directions:
+        move_to_new_room(user_input, show_room=False)
+        show_map()  # Show updated map after move
     else:
-        describe_room()
+        delay_print("Unknown command. Use N/S/E/W or Enter to return.")
+        show_map()
 
-def render_map(show_npcs=False, show_breadcrumbs=True):
+def render_map(show_npcs=False, fog_of_war=False):
     grid_size = 11
     half = grid_size // 2
     px, py = game_state["position"]
@@ -679,47 +905,64 @@ def render_map(show_npcs=False, show_breadcrumbs=True):
         for idx, s in enumerate(game_state["suspects"], 1):
             pos = s.get("position")
             if pos:
+                pos = tuple(pos)
                 suspect_positions.setdefault(pos, []).append(str(idx))
+
+    # Unicode box-drawing characters
+    VERT_WALL = "│"
+    HORZ_WALL = "─"
+    VERT_DOOR = "║"
+    HORZ_DOOR = "═"
+    SPACE = " "
 
     GREEN = "\033[32m"
     GREY = "\033[90m"
     WHITE = "\033[97m"
     YELLOW = "\033[93m"
-    CYAN = "\033[96m" 
+    CYAN = "\033[96m"
     RESET = "\033[0m"
 
     sanity = game_state["sanity"]
-
-    # Track all visited positions except current
     breadcrumbs = set(game_state.get("breadcrumbs", []))
-    breadcrumbs.add(game_state["position"])  # Always include current position
+    breadcrumbs.add(game_state["position"])
 
-    for y in range(py - half, py + half + 1):
+    legend = {}
+    for room in set(game_state["visited_locations"].values()):
+        letter = room[0].upper()
+        if letter not in legend:
+            legend[letter] = room
+    legend_lines = [f"{letter} = {room}" for letter, room in sorted(legend.items())]
+    legend_lines += [""] * (grid_size - len(legend_lines))
+
+    # Ensure walls and locked_doors exist
+    walls = game_state.get("walls", set())
+    locked_doors = game_state.get("locked_doors", set())
+
+    visited = set(game_state["visited_locations"].keys())
+
+    # Print map with vertical and horizontal walls/doors
+    for row_idx, y in enumerate(range(py - half, py + half + 1)):
         row = ""
         for x in range(px - half, px + half + 1):
             pos = (x, y)
+            # --- FOG OF WAR: Only show visited rooms ---
+            if fog_of_war and pos not in visited:
+                row += "   "
+                row += SPACE
+                continue
+
             char = " ◉ "
             color = GREEN
             if pos == (px, py):
                 char = " @ "
-                color = GREEN
-                color = CYAN   # <-- Use cyan for player position
+                color = CYAN
                 if sanity < 4 and random.random() < 0.5:
                     char = " # "
             elif show_npcs and pos in suspect_positions:
                 char = " " + "".join(suspect_positions[pos]) + " "
-                color = YELLOW  # Suspects are now yellow
+                color = YELLOW
                 if sanity < 4 and random.random() < 0.4:
                     char = " ? "
-            elif show_breadcrumbs and pos in breadcrumbs and pos != (px, py):
-                # Use the first letter of the room name if available, else a white dot
-                room_name = game_state["visited_locations"].get(pos)
-                if room_name:
-                    char = f" {room_name[0]} "
-                else:
-                    char = " ◉ "
-                color = WHITE  # Visited breadcrumb (now first letter, in white)
-
             elif pos in game_state["visited_locations"]:
                 loc = game_state["visited_locations"][pos]
                 char = f" {loc[0]} "
@@ -730,7 +973,45 @@ def render_map(show_npcs=False, show_breadcrumbs=True):
                 char = random.choice([" ! ", " ? ", " # "])
                 color = GREEN
             row += f"{color}{char}{RESET}"
-        print(row)
+
+            # Draw vertical wall/door to the right of this cell, only if both cells are visited (for fog of war)
+            right_pos = (x + 1, y)
+            if fog_of_war and (pos not in visited or right_pos not in visited):
+                row += SPACE
+            elif ((pos, right_pos) in locked_doors):
+                row += VERT_DOOR
+            elif ((pos, right_pos) in walls):
+                row += VERT_WALL
+            else:
+                row += SPACE
+        print(f"{row}   {legend_lines[row_idx]}")
+
+        # Draw horizontal walls/doors below this row (unless last row)
+        if row_idx < grid_size - 1:
+            wall_row = ""
+            for x in range(px - half, px + half + 1):
+                pos = (x, y)
+                below_pos = (x, y + 1)
+                # Only show horizontal walls/doors if both cells are visited (for fog of war)
+                if fog_of_war and (pos not in visited or below_pos not in visited):
+                    wall_row += SPACE * 3
+                elif ((pos, below_pos) in locked_doors):
+                    wall_row += HORZ_DOOR * 3
+                elif ((pos, below_pos) in walls):
+                    wall_row += HORZ_WALL * 3
+                else:
+                    wall_row += SPACE * 3
+                # Add a space or wall/door between cells
+                right_pos = (x + 1, y)
+                if fog_of_war and (pos not in visited or right_pos not in visited):
+                    wall_row += SPACE
+                elif ((pos, right_pos) in locked_doors):
+                    wall_row += VERT_DOOR
+                elif ((pos, right_pos) in walls):
+                    wall_row += VERT_WALL
+                else:
+                    wall_row += SPACE
+            print(f"{wall_row}")
 
     # Add to breadcrumbs after rendering
     if "breadcrumbs" not in game_state:
@@ -748,14 +1029,23 @@ def render_map(show_npcs=False, show_breadcrumbs=True):
         ]
         delay_print(random.choice(whispers))
 
+    # --- Show available exits at the bottom of the map ---
+    x, y = game_state["position"]
+    available_exits = [d.upper() for d in game_state["passages"].get((x, y), set())]
+    if available_exits:
+        print(f"\nAvailable exits: {', '.join(available_exits)}")
+    else:
+        print("\nThere are no available exits from this room.")
+    
 def show_inventory():
     clear()
     delay_print("Inventory:")
     if game_state["inventory"]:
         for idx, item in enumerate(game_state["inventory"], 1):
             print(f"[{idx}] {distort_text(item, game_state['sanity'])}")
-        print(f"[{len(game_state['inventory'])+1}] Return")
-        choice = input("\nSelect an item to inspect or return: ")
+        print(f"[{len(game_state['inventory'])+1}] Use an item")
+        print(f"[{len(game_state['inventory'])+2}] Return")
+        choice = input("\nSelect an item to inspect, use, or return: ")
 
         # Handle case where user just presses Enter
         if choice.strip() == "":
@@ -764,7 +1054,16 @@ def show_inventory():
 
         if choice.isdigit():
             idx = int(choice) - 1
-            if 0 <= idx < len(game_state["inventory"]):
+            if idx == len(game_state["inventory"]):  # Use an item
+                use_item()
+                return
+            elif idx == len(game_state["inventory"]) + 1:  # Return
+                if previous_menu_function:
+                    previous_menu_function()
+                else:
+                    describe_room()
+                return
+            elif 0 <= idx < len(game_state["inventory"]):
                 item = game_state["inventory"][idx]
                 if item == "Envelope from the Commissioner":
                     delay_print(
@@ -777,6 +1076,21 @@ You, {game_state['name']}, are to be my cloaked investigator. Unravel the truth�
 — Commissioner of Police of the Metropolis
                     """)
                     input("\nPress Enter to return.")
+
+                elif item == "Elder Sign":
+                    delay_print(
+                        "Elder Sign: A strange, star-shaped talisman carved from ancient stone. "
+                        "Its lines twist in impossible angles, and the air around it feels subtly warped. "
+                        "Legends say it wards off the Old Ones and brings strength to the faithful."
+                    )
+                    input("\nPress Enter to return.")
+
+                elif item == "Scrying Lens":
+                    delay_print(
+                        "Scrying Lens: A cloudy crystal lens set in tarnished silver. When held to the eye, it reveals the hidden movements of those who dwell within the manor."
+                    )
+                    input("\nPress Enter to return.")
+
                 else:
                     delay_print(f"You inspect the {item}.")
                     input("\nPress Enter to return.")
@@ -800,27 +1114,86 @@ You, {game_state['name']}, are to be my cloaked investigator. Unravel the truth�
         title_screen()
 
 def use_item():
-    # Only show usable potions
-    usable = [p for p in potion_pool if p["name"] in game_state["inventory"]]
+    usable = [item for item in game_state["inventory"] if item in [a["name"] for a in artifact_pool + potion_pool]]
     if not usable:
-        delay_print("You have no usable potions.")
+        delay_print("You have no usable items.")
         input("\nPress Enter to return.")
         show_inventory()
         return
-    print("\nWhich potion would you like to use?")
-    for idx, p in enumerate(usable, 1):
-        print(f"[{idx}] {p['name']} – {p['desc']}")
+    print("\nWhich item would you like to use?")
+    for idx, name in enumerate(usable, 1):
+        print(f"[{idx}] {name}")
     print(f"[{len(usable)+1}] Return")
     choice = input("> ").strip()
     if choice.isdigit():
         idx = int(choice) - 1
         if 0 <= idx < len(usable):
-            potion = usable[idx]
-            game_state[potion["effect"]] = min(18, game_state[potion["effect"]] + potion["amount"])
-            delay_print(f"You drink the {potion['name']}. {potion['desc']} (+{potion['amount']} {potion['effect'].capitalize()})")
-            game_state["inventory"].remove(potion["name"])
-            input("\nPress Enter to return.")
-            show_inventory()
+            item_name = usable[idx]
+            # Find artifact or potion
+            artifact = next((a for a in artifact_pool if a["name"] == item_name), None)
+            potion = next((p for p in potion_pool if p["name"] == item_name), None)
+            if artifact:
+                # Apply main effect
+                if artifact.get("effect") in game_state:
+                    game_state[artifact["effect"]] = min(18, game_state[artifact["effect"]] + artifact["amount"])
+                    delay_print(f"You use the {artifact['name']}. {artifact['desc']} (+{artifact['amount']} {artifact['effect'].capitalize()})")
+                # Apply side effect if any
+                if "side_effects" in artifact:
+                    for stat, amt in artifact["side_effects"]:
+                        game_state[stat] = max(0, min(18, game_state[stat] + amt))
+                        delay_print(f"Side effect: {stat.capitalize()} {'+' if amt > 0 else ''}{amt}")
+                # Special effects
+                if artifact["effect"] == "clue":
+                    # Reveal a random clue not yet found
+                    missing = [c for c in clue_pool if c not in game_state["clues"]]
+                    if missing:
+                        clue = random.choice(missing)
+                        game_state["clues"].append(clue)
+                        delay_print(f"The {artifact['name']} reveals a clue: {clue}")
+                elif artifact["effect"] == "hint":
+                    delay_print("A vision flashes before your eyes, hinting at the truth. (You gain a hint!)")
+                elif artifact["effect"] == "secret":
+                    delay_print("The candlelight flickers, revealing a hidden message on the wall.")
+                elif artifact["effect"] == "random":
+                    effect = random.choice(["clue", "sanity", "hint"])
+                    if effect == "clue":
+                        missing = [c for c in clue_pool if c not in game_state["clues"]]
+                        if missing:
+                            clue = random.choice(missing)
+                            game_state["clues"].append(clue)
+                            delay_print(f"The skull whispers a clue: {clue}")
+                    elif effect == "sanity":
+                        game_state["sanity"] = max(0, game_state["sanity"] - 2)
+                        delay_print("The skull whispers forbidden secrets. You feel your sanity slipping (-2 Sanity).")
+                    else:
+                        delay_print("The skull whispers a cryptic hint about the case.")
+                elif artifact["effect"] == "shortcut":
+                    delay_print("You decipher the map and discover a shortcut. (A hidden room is revealed!)")
+                elif artifact["effect"] == "quest":
+                    delay_print("The letter reveals a new lead. (A side quest or clue is added!)")
+                    game_state["quests"].append("Follow up on the sealed letter.")
+                elif artifact["effect"] == "puzzle":
+                    delay_print("You feel this ring may be important for a puzzle or ending.")
+                elif artifact["effect"] == "repel":
+                    delay_print("You feel protected from supernatural harm.")
+                elif artifact["effect"] == "warn":
+                    delay_print("The watch ticks rapidly, warning you of imminent danger.")
+                elif artifact["effect"] == "ritual":
+                    delay_print("You sense this will be useful in a ritual or puzzle.")
+                elif artifact["effect"] == "unlock":
+                    delay_print("You sense this key will open something important.")
+                # Remove after use (permanent effect)
+                game_state["inventory"].remove(item_name)
+                input("\nPress Enter to return.")
+                show_inventory()
+                return
+            elif potion:
+                game_state[potion["effect"]] = min(18, game_state[potion["effect"]] + potion["amount"])
+                delay_print(f"You drink the {potion['name']}. {potion['desc']} (+{potion['amount']} {potion['effect'].capitalize()})")
+                game_state["inventory"].remove(potion["name"])
+                input("\nPress Enter to return.")
+                show_inventory()
+                return
         else:
             show_inventory()
     else:
@@ -832,7 +1205,9 @@ def handle_input(user_input, return_function):
     if user_input in valid_directions:
         move_to_new_room(user_input)
         return  # Prevent falling through to other cases
-
+    elif user_input == "score":
+        show_score()
+        return_function()
     elif user_input == "help":
         show_help()
     elif user_input == "look" or user_input == "l":
@@ -867,19 +1242,20 @@ def handle_input(user_input, return_function):
         return_function()
 
 def show_help():
-    delay_print("Available commands:")
-    delay_print("- help: Show this help message")
-    delay_print("- look [l]: Look around the current location")
-    delay_print("- save: Save your game")
-    delay_print("- load: Load a previous save")
-    delay_print("- quit: Quit the game")
-    delay_print("- back/menu: Return to the previous menu")
-    delay_print("- title: Return to the title screen")
-    delay_print("- inventory [i]: Show your inventory")
-    delay_print("- journal [j]: Show your journal entries")
-    delay_print("- quests/mystery: Show active quests")
-    delay_print("- stats: Show character stats")
-    delay_print("- n/s/e/w/ne/nw/se/sw: Move in that direction from any screen")
+    print("Available commands:")
+    print("- help: Show this help message")
+    print("- look [l]: Look around the current location")
+    print("- save: Save your game")
+    print("- load: Load a previous save")
+    print("- quit: Quit the game")
+    print("- back/menu: Return to the previous menu")
+    print("- title: Return to the title screen")
+    print("- inventory [i]: Show your inventory")
+    print("- journal [j]: Show your journal entries")
+    print("- quests/mystery: Show active quests")
+    print("- stats: Show character stats")
+    print("- score: Show your current score and scoring breakdown")
+    print("- n/s/e/w/ne/nw/se/sw: Move in that direction from any screen")
     input("\nPress Enter to return.")
 
     if previous_menu_function:
@@ -887,18 +1263,19 @@ def show_help():
     else:
         title_screen()
 
-def look_around():
+def look_around(pause=True):
     room = game_state["location"]
     descriptions = room_templates.get(room, ["You see nothing remarkable."])
     first_sentence = descriptions[0].split(".")[0] + "."
     delay_print(first_sentence)
-    input("\nPress Enter to return.")
+    if pause:
+        input("\nPress Enter to return.")
 
 def title_screen():
     global previous_menu_function
     previous_menu_function = title_screen
     clear()
-    print("""
+    print(r"""
   _____                              _             
  |  __ \                            (_)            
  | |__) |__ _ __ ___ _   _  __ _ ___ _  ___  _ __  
@@ -906,8 +1283,9 @@ def title_screen():
  | |  |  __/ |  \__ \ |_| | (_| \__ \ | (_) | | | |
  |_|   \___|_|  |___/\__,_|\__,_|___/_|\___/|_| |_|
                                                   
-         A Victorian Roguelike Mystery
+        
     """)
+    delay_print("A Victorian Roguelike Mystery!")
     print("[1] Begin New Investigation")
     print("[2] Load Game")
     print("[3] Instructions")
@@ -922,6 +1300,7 @@ def title_screen():
     elif user_input == "3":
         instructions()
     elif user_input == "4" or user_input == "quit" or user_input == "q" or user_input == "exit":
+        delay_print("Thank you for playing! Goodbye.")
         exit()
     else:
         handle_input(user_input, title_screen)
@@ -974,21 +1353,6 @@ def distort_text(text, sanity):
         # Zalgo/unicode glitch
         return zalgo(text)
 
-    move_suspects()
-
-    # Check for suspects in the same room
-    suspects_here = [
-        s for s in game_state["suspects"]
-        if s.get("position") == game_state["position"]
-    ]
-    if suspects_here:
-        names = ', '.join(s["name"] for s in suspects_here)
-        delay_print(f"You see someone here: {names}")
-
-    input("Press Enter to enter the new room.")
-    
-    describe_room()
-
 def add_random_clue():
     room = game_state["location"]
     found_something = False
@@ -1000,7 +1364,24 @@ def add_random_clue():
             game_state["clues"].append(clue)
             delay_print(f"Clue discovered: {clue}")
             game_state["journal"].append(f"CLUE FOUND at {game_state['location']}: {clue}")
+            game_state["score"] += 10  # Add to score for finding a clue
+            game_state["score_log"].append(f"Clue: {clue} [+10]")
+            print(f"[DEBUG] Score after finding clue: {game_state['score']}")
             found_something = True
+
+    # Scrying Lens logic
+    if (
+        "scrying_lens_room" in game_state
+        and room == game_state["scrying_lens_room"]
+        and "Scrying Lens" not in game_state["inventory"]
+    ):
+        game_state["inventory"].append("Scrying Lens")
+        game_state["can_see_npcs"] = True
+        delay_print(
+            "You discover a cloudy crystal lens set in tarnished silver: the Scrying Lens.\n"
+            "When you peer through it, the locations of others in the manor shimmer into view on your map."
+        )
+        found_something = True
 
     # Potion logic
     potion = potion_locations.get(room)
@@ -1010,8 +1391,83 @@ def add_random_clue():
             delay_print(f"You found a {potion['name']}! {potion['desc']}")
             found_something = True
 
+    # Artifact logic
+    artifact = game_state.get("artifact_locations", {}).get(room)
+    if artifact and artifact["name"] not in game_state["inventory"]:
+        game_state["inventory"].append(artifact["name"])
+        delay_print(f"You found {artifact['name']}! {artifact['desc']}")
+        game_state["score"] += 20  # Add to score for finding an artifact
+        print(f"[DEBUG] Score after finding artifact: {game_state['score']}")
+        game_state["journal"].append(f"ARTIFACT FOUND at {game_state['location']}: {artifact['name']}")
+        game_state["score_log"].append(f"Artifact: {artifact['name']} [+20]") 
+        found_something = True
+
+    # Elder Sign logic
+    if (
+        "elder_sign_room" in game_state
+        and room == game_state["elder_sign_room"]
+        and "Elder Sign" not in game_state["inventory"]
+    ):
+        game_state["inventory"].append("Elder Sign")
+        game_state["faith"] = min(18, game_state["faith"] + 3)
+        delay_print(
+            "You discover a strange, star-shaped talisman: the Elder Sign.\n"
+            "Its lines twist in impossible angles, and the air around it feels subtly warped.\n"
+            "You feel a surge of holy power (+3 Faith)."
+        )
+        found_something = True
+
     if not found_something:
         delay_print("You search carefully, but find nothing new.")
+    # input("Press Enter to continue.")
+    # room = game_state["location"]
+    # found_something = False
+
+    
+def show_score():
+    clear()
+    delay_print(f"Final Score: {game_state['score']}")
+    print("\n--- Score Breakdown ---")
+
+    clues = [entry for entry in game_state["score_log"] if entry.startswith("Clue:")]
+    artifacts = [entry for entry in game_state["score_log"] if entry.startswith("Artifact:")]
+    interrogations = [entry for entry in game_state["score_log"] if entry.startswith("Interrogated:")]
+    solved = [entry for entry in game_state["score_log"] if entry.startswith("Case Solved")]
+    turns = [entry for entry in game_state["score_log"] if entry.startswith("5 turns taken")]
+    penalties = [entry for entry in game_state["score_log"] if entry not in clues + artifacts + interrogations + solved + turns]
+
+    if clues:
+        print(f"Clues found: {len(clues)} x +10 = +{len(clues)*10}")
+        for entry in clues:
+            print("  " + entry)
+    if artifacts:
+        print(f"Artifacts found: {len(artifacts)} x +20 = +{len(artifacts)*20}")
+        for entry in artifacts:
+            print("  " + entry)
+    if interrogations:
+        print(f"Suspects interrogated: {len(interrogations)} x +15 = +{len(interrogations)*15}")
+        for entry in interrogations:
+            print("  " + entry)
+    if solved:
+        print(f"Case solved: +100")
+        for entry in solved:
+            print("  " + entry)
+    if turns:
+        print(f"Turn penalties: {len(turns)} x -1 = {len(turns)*-1}")
+        for entry in turns:
+            print("  " + entry)
+    for entry in penalties:
+        print(entry)
+
+    print("\n--- Scoring Rules ---")
+    print("Clues found: +10 each")
+    print("Suspects interrogated: +15 each")
+    print("Artifacts found: +20 each")
+    print("Case solved: +100")
+    print("Each 5 turns taken: -1")
+    print("Stamina dropped to 0: -25")
+    print("Sanity dropped to 0: -50")
+    print("Killing any suspect: -30")
     input("Press Enter to continue.")
 
 def case_resolution():
@@ -1020,6 +1476,9 @@ def case_resolution():
         delay_print("The truth crystallizes. It is as chilling as it is inevitable, threading through every clue you've seen.")
         delay_print("You record the findings in your journal. The ink trembles as if the truth resists being committed to paper.")
         game_state["journal"].append("Case solved at " + game_state["location"])
+        game_state["score"] += 100  # Add to score for solving the case
+        delay_print("You have solved the case! Your score is now: " + str(game_state["score"]))
+        delay_print("You feel a sense of closure, but also a lingering unease. The shadows of the manor still seem to whisper secrets you may never fully understand.")
         save_game()
     else:
         delay_print("There are still missing pieces. They flit just beyond comprehension like shadows behind stained glass.")
@@ -1031,6 +1490,8 @@ def describe_room():
     previous_menu_function = describe_room
     clear()
     room = game_state["location"]
+    # --- Show room name at the top ---
+    print(f"\n=== {room} ===\n")
     descriptions = room_templates.get(room, ["It's a bare and quiet room."])
     desc = random.choice(descriptions)
     distorted = distort_text(desc, game_state["sanity"])
@@ -1049,7 +1510,11 @@ def describe_room():
         delay_print(distort_text(flavor, game_state["sanity"]))
         used.setdefault(pos, []).append(idx)
         game_state["room_flavor_used"] = used
-    # Otherwise, use 25% chance as normal
+       # Show inventory tip only on first entry
+        if not game_state.get("inventory_tip_shown"):
+            print("\nCheck your inventory (press '5' or 'i') to see your list of belongings.")
+            game_state["inventory_tip_shown"] = True
+    # Otherwise, use 40% chance as normal
     elif available_indices and random.random() < 0.40:
         idx = random.choice(available_indices)
         flavor = flavor_text_pool[idx]
@@ -1059,6 +1524,7 @@ def describe_room():
     elif not available_indices:
         # Reset so new ones can be used on future revisits
         used[pos] = []
+
 
     # Check if any suspect is present in the current room
     suspects_here = [
@@ -1096,23 +1562,41 @@ def describe_room():
     else:
         print("\nThere are no available exits from this room.")
 
+ 
+    # Sanity penalty: only apply once
+    if game_state["sanity"] <= 0 and not game_state.get("sanity_zero_penalized", False):
+        game_state["score"] -= 25
+        game_state["score_log"].append("Sanity dropped to 0 [-25]")
+        game_state["sanity_zero_penalized"] = True
+
     user_input = input("> ").strip().lower()
     if user_input == "1":
         add_random_clue()
+        game_state["turns"] += 1
+        if game_state["turns"] % 15 == 0:
+            game_state["score"] -= 1
+            game_state["score_log"].append("15 turns taken [-1]")
+        input("Press Enter to return to the action menu.")
         describe_room()
+        return
     elif user_input == "2":
         clear()
         print("Where would you like to go? (N, S, E, W, NE, NW, SE, SW)")
         dir_input = input("> ").strip().lower()
         if dir_input in ["n","s","e","w","ne","nw","se","sw"]:
             move_to_new_room(dir_input)
+            game_state["turns"] += 1
+            if game_state["turns"] % 15 == 0:
+                game_state["score"] -= 1
+                game_state["score_log"].append("15 turns taken [-1]")
         else:
             delay_print("Unknown direction. Please enter a valid compass direction.")
             input("Press Enter to continue.")
             describe_room()
     elif user_input == "3":
         show_map()
-        describe_room()
+        # describe_room() # Return to room description after showing map to prevent double map display
+        return
     elif user_input == "4":
         show_journal()
     elif user_input == "5":
@@ -1125,7 +1609,22 @@ def describe_room():
         save_game()
         describe_room()
     elif user_input == "9" or user_input == "quit":
+        show_score() # Show score before quitting
         title_screen()
+    elif user_input == "f":
+        print("\nChoose a suspect to fight:(DEBUG)")
+        for i, s in enumerate(game_state["suspects"], 1):
+            print(f"[{i}] {s['name']}")
+        choice = input("> ").strip()
+        if choice.isdigit():
+            idx = int(choice) - 1
+            if 0 <= idx < len(game_state["suspects"]):
+                skill_check_combat(game_state["suspects"][idx]["name"])
+                describe_room()
+                return
+        print("Invalid choice.")
+        describe_room()
+        return
     else:
         handle_input(user_input, describe_room)
 
@@ -1175,7 +1674,7 @@ def interrogate_suspect():
             clear()
             delay_print(f"You confront {suspect['name']}.")
 
-            # --- Persuasion effect ---
+            # Persuasion effect
             perception_mod = 0
             if game_state.get("persuasion_active", False):
                 perception_mod = 3
@@ -1187,7 +1686,7 @@ def interrogate_suspect():
                     game_state["persuasion_targets"] = set()
                 delay_print("(Persuasion: Your perception is boosted!)")
 
-            # --- Comeliness modifier ---
+            # Comeliness modifier
             comeliness_mod = 0
             if game_state["comeliness"] >= 17:
                 comeliness_mod = 2
@@ -1198,50 +1697,108 @@ def interrogate_suspect():
             if "credibility" not in suspect:
                 suspect["credibility"] = random.randint(1, 10)
 
-            # Apply comeliness and persuasion modifier
             effective_credibility = suspect["credibility"] + comeliness_mod
             effective_perception = game_state["perception"] + perception_mod
 
-            # Display the interrogation results
-       #if comeliness_mod > 0:
             delay_print(f"Your presence seems to sway them. (Comeliness modifier: +{comeliness_mod})")
             delay_print(f"Credibility rating: {effective_credibility}/10")
             delay_print(f"Perception (with boost): {effective_perception}/18")
             delay_print(suspect["alibi"])
-# --- Journal logging for suspect responses ---
+
+            # Journal logging for suspect responses
+
             journal_entry = (
-                 f"Location: {game_state['location']}\n"
-                 f"Suspect: {suspect['name']}\n"
-                 f"Credibility: {effective_credibility}/10\n"
-                 f"Alibi: {suspect['alibi']}\n"
-                 "-----------------------------"
-)
+                f"Location: {game_state['location']}\n"
+                f"Suspect: {suspect['name']}\n"
+                f"Credibility: {effective_credibility}/10\n"
+                f"Alibi: {suspect['alibi']}\n"
+                "-----------------------------"
+            )
             game_state["journal"].append(journal_entry)
-            # Check if the suspect is lying
-            if perception_mod > 0 and effective_perception >= 15:
-                delay_print("You sense that something in their alibi is off. They may be lying!")
 
-            # Lower credibility after questioning
-            suspect["credibility"] = max(0, suspect["credibility"] - 1)
+           
+            # Perception check: observe body language
+            print("\nOptions:")
+            print("[J] Enter this testimony in your journal")
+            options = {"j"}
+            if suspect["credibility"] < 5:
+                print("[P] Push harder for the truth")
+                options.add("p")
+            if game_state["clues"]:
+                print("[C] Confront with a clue")
+                options.add("c")
+            print("[O] Observe body language")
+            options.add("o")
+            print("[L] Leave interrogation")
+            options.add("l")
+            print("[R] Return to action menu")
+            options.add("r")
 
-            # If credibility is too low, suspect attacks!
-            if suspect["credibility"] <= 2:
-                delay_print(f"{suspect['name']} snaps under pressure and lashes out at you!")
+            choice = input("> ").strip().lower()
+            if choice == "p" and "p" in options:
+                # Skill check: perception or sanity
+                skill = random.choice(["perception", "sanity"])
+                roll = game_state[skill] + roll_fudge()
+                if roll > 12:
+                    delay_print("Your pressure pays off. The suspect cracks and reveals more!")
+                    # Reveal a new clue or contradiction
+                    if suspect.get("is_murderer"):
+                        delay_print("You catch a flicker of guilt in their eyes. They are hiding something big.")
+                    else:
+                        delay_print("They reveal a detail that points suspicion elsewhere.")
+                else:
+                    delay_print("The suspect grows agitated and refuses to say more.")
+                    suspect["credibility"] = max(0, suspect["credibility"] - 1)
                 input("Press Enter to continue.")
-                skill_check_combat(suspect['name'], random.randint(4, 8), stat="strength")
-                # Optionally, after combat, credibility resets a bit
-                suspect["credibility"] = min(5, suspect["credibility"] + 2)
-
-            input("Press Enter to continue.")
-            describe_room()
-        elif idx == len(suspects_here):
-            describe_room()
-        else:
-            delay_print("Invalid choice.")
-            input("Press Enter to continue.")
-            interrogate_suspect()
-    else:
-        handle_input(user_input, interrogate_suspect)
+                interrogate_suspect()
+                return
+            elif choice == "j" and "j" in options:
+                delay_print("Testimony already recorded in your journal.")
+                input("Press Enter to continue.")
+                interrogate_suspect()
+                return
+            elif choice == "c" and "c" in options:
+                print("Which clue do you want to confront with?")
+                for i, clue in enumerate(game_state["clues"], 1):
+                    print(f"[{i}] {clue}")
+                clue_choice = input("> ").strip()
+                if clue_choice.isdigit():
+                    clue_idx = int(clue_choice) - 1
+                    if 0 <= clue_idx < len(game_state["clues"]):
+                        clue = game_state["clues"][clue_idx]
+                        # Check for alignment
+                        if clue_motives.get(clue) == suspect["motive"]:
+                            delay_print("The suspect's eyes widen—they recognize the clue! You sense a breakthrough.")
+                            # Optionally, lower credibility or reveal more
+                            suspect["credibility"] = max(0, suspect["credibility"] - 2)
+                            delay_print("They stammer and contradict themselves. You sense they're hiding something.")
+                            game_state["score"] += 15 # Add to score for successful clue confrontation
+                        else:
+                            delay_print("The suspect scoffs at your accusation.")
+                            suspect["credibility"] = max(0, suspect["credibility"] - 1)
+                input("Press Enter to continue.")
+                interrogate_suspect()
+                return
+            elif choice == "o" and "o" in options:
+                # Perception check
+                roll = game_state["perception"] + roll_fudge()
+                if roll >= 12:
+                    delay_print("You notice a nervous tic. The suspect is definitely hiding something.")
+                else:
+                    delay_print("You can't read their body language this time.")
+                input("Press Enter to continue.")
+                interrogate_suspect()
+                return
+            
+            elif choice == "l":
+                describe_room()
+                return
+            elif choice == "r":
+                describe_room()
+                return
+            else:
+                interrogate_suspect()
+                return
 
 def dream_flashback():
     global previous_menu_function
@@ -1284,7 +1841,7 @@ def intro_scene():
             character_creation()
             break
         else:
-            delay_print("Invalid choice. Please select an option.")
+            delay_print("Invalid choice. Please select 1 or 2.")
 
 def enter_manor():
     global previous_menu_function
@@ -1310,6 +1867,7 @@ def get_player_name():
         print("Would you like to enter a name or have one assigned at random?")
         print("[1] Enter my own name")
         print("[2] Randomize name")
+
         choice = input("> ").strip()
         if choice == "2":
             name = random_name()
@@ -1317,6 +1875,7 @@ def get_player_name():
             confirm = input("Accept this name? (Y/N): ").strip().lower()
             if confirm == "y":
                 return name
+
         elif choice == "1":
             name = input("Enter your name: ").strip()
             if name:
@@ -1455,17 +2014,31 @@ def character_creation():
 
     game_state["inventory"].append("Envelope from the Commissioner")
 
+    # Give player one random artifact as a clue at game start
+    starting_artifact = random.choice(artifact_pool)
+    game_state["inventory"].append(starting_artifact["name"])
+    clue_text = f"You begin with a mysterious item: {starting_artifact['name']}. {starting_artifact['desc']}"
+    game_state["clues"].append(clue_text)
+    game_state["journal"].append(f"CLUE FOUND at start: {clue_text}")
+
     initialize_suspects()
     # Mark starting location visited at (0,0)
     game_state["visited_locations"] = {(0, 0): "Foyer"}
     game_state["location"] = "Foyer"
     game_state["position"] = (0, 0)
-    generate_passages()
+
+    generate_passages() # Generate passages between rooms
+    auto_generate_walls_and_doors() # Generate walls and doors automatically
+    print(f"Walls generated: {len(game_state['walls'])}")
+    print(f"Locked doors generated: {len(game_state['locked_doors'])}") # Debugging line
+
     delay_print(f"Welcome, {game_state['name']} the {game_state['background']}. The hour is late, and the shadows grow bold.")
     input("Press Enter to begin.")
 
     assign_clues_to_rooms()
     assign_potions_to_rooms()
+    assign_elder_sign_to_room()
+    assign_artifacts_to_rooms()  # Assign artifacts to rooms
 
     # Begin the first case
     start_first_case()
@@ -1478,51 +2051,95 @@ def start_first_case():
 
 def skill_check_combat(enemy_name, enemy_difficulty=None, stat=None):
     clear()
-    # Find the suspect object
     suspect = next((s for s in game_state["suspects"] if s["name"] == enemy_name), None)
     delay_print(f"You face off against {enemy_name}. The air crackles with tension.")
     input("Press Enter to continue.")
 
-    # Player's composite score
-    player_base = (game_state["strength"] + game_state["stamina"] + game_state["agility"]) // 3
-    player_roll = player_base + roll_fudge()
-
-    # Enemy's composite score (use suspect stats if available)
+    player_stamina = game_state["stamina"]
     if suspect:
-        enemy_base = (suspect.get("strength", 8) + suspect.get("stamina", 8) + suspect.get("agility", 8)) // 3
+        enemy_stamina = suspect.get("stamina", 10)
+        enemy_name = suspect["name"]
     else:
-        enemy_base = enemy_difficulty if enemy_difficulty is not None else 8
-    enemy_roll = enemy_base + roll_fudge()
+        enemy_stamina = enemy_difficulty if enemy_difficulty is not None else 10
 
-    delay_print(f"Your combat score: {player_base} + die roll = {player_roll}")
-    delay_print(f"Enemy combat score: {enemy_base} + die roll = {enemy_roll}")
-    input("Press Enter to continue.")
+    round_num = 1
+    while player_stamina > 0 and enemy_stamina > 0:
+        clear()
+        delay_print(f"--- Combat Round {round_num} ---")
+        delay_print(f"Your Stamina: {player_stamina} | {enemy_name}'s Stamina: {enemy_stamina}")
 
-    if player_roll >= enemy_roll:
+        # Player's composite score
+        player_base = (game_state["strength"] + game_state["stamina"] + game_state["agility"]) // 3
+        player_roll = player_base + roll_fudge()
+
+        # Enemy's composite score
+        if suspect:
+            enemy_base = (suspect.get("strength", 8) + suspect.get("stamina", 8) + suspect.get("agility", 8)) // 3
+        else:
+            enemy_base = enemy_difficulty if enemy_difficulty is not None else 8
+        enemy_roll = enemy_base + roll_fudge()
+
+        delay_print(f"Your combat score: {player_base} + die roll = {player_roll}")
+        delay_print(f"Enemy combat score: {enemy_base} + die roll = {enemy_roll}")
+
+        # Determine round outcome
+        if player_roll >= enemy_roll:
+            delay_print(f"You land a blow! {enemy_name} loses 2 stamina.")
+            enemy_stamina -= 2
+            game_state["sanity"] = max(1, game_state["sanity"] - 1)
+        else:
+            delay_print(f"{enemy_name} strikes you! You lose 2 stamina.")
+            player_stamina -= 2
+            game_state["sanity"] = max(0, game_state["sanity"] - 2)
+        delay_print(f"Your Stamina: {player_stamina} | {enemy_name}'s Stamina: {enemy_stamina}")
+        input("Press Enter to continue.")
+        round_num += 1
+
+    # End of combat
+    game_state["stamina"] = player_stamina
+    if suspect:
+        suspect["stamina"] = enemy_stamina
+
+    if player_stamina > 0:
         delay_print(f"You overcome the threat posed by {enemy_name}! You live to investigate another day.")
-        game_state["sanity"] = max(1, game_state["sanity"] - 1)
         game_state["journal"].append(f"Survived combat against {enemy_name}.")
+        if suspect:
+            suspect["stamina"] = 0
+            # Penalize for killing any suspect (manslaughter), not just the murderer
+            game_state["score"] -= 15
+            delay_print("You have taken a life in self-defense. The weight of this act will haunt you. (-15 Score)")
     else:
         delay_print(f"The encounter with {enemy_name} overwhelms you...")
-        game_state["sanity"] = max(0, game_state["sanity"] - 2)
-        game_state["health"] = max(0, game_state["health"] - 3)
         game_state["journal"].append(f"Defeated by {enemy_name}. Survived, but barely.")
 
     # Check if the suspect was the murderer and was just defeated
-    if suspect and suspect.get("is_murderer") and game_state["health"] > 0 and player_roll >= enemy_roll:
+    if suspect and suspect.get("is_murderer") and player_stamina > 0:
+        game_state["score"] -= 25  # Penalize for violent resolution
         delay_print(f"As {suspect['name']} falls, the truth is revealed: {suspect['name']} was the murderer all along!")
         delay_print("But justice through violence is not justice at all. The Commissioner is furious at your methods.")
         delay_print("You have failed to solve the mystery through deduction. The case is closed in disgrace.")
+        print(r"""
+ __     __           _                    
+ \ \   / /          | |                   
+  \ \_/ /__  _   _  | |     ___  ___  ___ 
+   \   / _ \| | | | | |    / _ \/ __|/ _ \
+    | | (_) | |_| | | |___| (_) \__ \  __/
+    |_|\___/ \__,_| |______\___/|___/\___|
+    """)        
+        delay_print("Sorry!")
+        show_score()  # <-- Show score before returning to title
         input("Press Enter to continue.")
         title_screen()
         return
 
-    if game_state["health"] <= 0:
-        delay_print("You have succumbed to your wounds. The investigation ends here.")
+    if player_stamina <= 0:
+        delay_print("You have succumbed to exhaustion. The investigation ends here.")
+        game_state["score"] -= 35  # Penalize for failure
+        show_score()  # <-- Show score before returning to title
         input("Press Enter to continue.")
         title_screen()
     else:
         input("Press Enter to continue.")
 
-# --- Start the game ---
+# --- Start the Game ---   
 title_screen()
