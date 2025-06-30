@@ -339,10 +339,16 @@ def delay_print(s, speed=0.01):
     stop[0] = True
     thread.join(timeout=0.1)  # Clean up the thread
 
+def to_tuple(obj):
+    if isinstance(obj, list):
+        return tuple(to_tuple(i) for i in obj)
+    return obj
+
 def save_game():
     try:
-        # Convert tuple keys in visited_locations to strings for JSON
         game_state_copy = game_state.copy()
+
+        # Convert tuple keys in visited_locations to strings for JSON
         visited_serializable = {str(k): v for k, v in game_state["visited_locations"].items()}
         game_state_copy["visited_locations"] = visited_serializable
 
@@ -352,12 +358,12 @@ def save_game():
             game_state_copy["room_flavor_used"] = flavor_serializable
 
         # Convert sets to lists for JSON serialization
-        
         for key in ["breadcrumbs", "persuasion_targets"]:
             if key in game_state_copy and isinstance(game_state_copy[key], set):
                 game_state_copy[key] = list(game_state_copy[key])
+
+        # Convert passages dict of sets to dict of lists
         if "passages" in game_state_copy:
-            # Convert passages dict of sets to dict of lists
             game_state_copy["passages"] = {str(k): list(v) for k, v in game_state_copy["passages"].items()}
 
         with open("savegame.json", "w") as f:
@@ -368,11 +374,6 @@ def save_game():
         print(f"Error saving game: {e}")
     input("Press Enter to continue.")
 
-def to_tuple(obj): 
-    if isinstance(obj, list):
-        return tuple(to_tuple(i) for i in obj)
-    return obj
-
 def load_game():
     global game_state, previous_menu_function
     try:
@@ -380,46 +381,52 @@ def load_game():
             with open("savegame.json", "r") as f:
                 loaded_state = json.load(f)
 
-        # Convert string keys back into tuples for visited_locations
-        visited = {}
-        for key, value in loaded_state.get("visited_locations", {}).items():
-            if isinstance(key, str) and key.startswith("(") and "," in key:
-                x, y = map(int, key.strip("()").split(","))
-                visited[(x, y)] = value
-            elif isinstance(key, tuple):
-                visited[key] = value
-        loaded_state["visited_locations"] = visited
-
-        # Convert string keys back into tuples and values to sets for passages
-        if "passages" in loaded_state:
-            passages = {}
-            for key, value in loaded_state["passages"].items():
+            # Convert string keys back into tuples for visited_locations
+            visited = {}
+            for key, value in loaded_state.get("visited_locations", {}).items():
                 if isinstance(key, str) and key.startswith("(") and "," in key:
                     x, y = map(int, key.strip("()").split(","))
-                    passages[(x, y)] = set(value)
+                    visited[(x, y)] = value
                 elif isinstance(key, tuple):
-                    passages[key] = set(value)
-            loaded_state["passages"] = passages
+                    visited[key] = value
+            loaded_state["visited_locations"] = visited
 
-        # Convert string keys back into tuples for room_flavor_used
-        if "room_flavor_used" in loaded_state:
-            flavor = {}
-            for key, value in loaded_state["room_flavor_used"].items():
-                if isinstance(key, str) and key.startswith("(") and "," in key:
-                    x, y = map(int, key.strip("()").split(","))
-                    flavor[(x, y)] = value
-                elif isinstance(key, tuple):
-                    flavor[key] = value
-            loaded_state["room_flavor_used"] = flavor
+            # Convert string keys back into tuples and values to sets for passages
+            if "passages" in loaded_state:
+                passages = {}
+                for key, value in loaded_state["passages"].items():
+                    if isinstance(key, str) and key.startswith("(") and "," in key:
+                        x, y = map(int, key.strip("()").split(","))
+                        passages[(x, y)] = set(value)
+                    elif isinstance(key, tuple):
+                        passages[key] = set(value)
+                loaded_state["passages"] = passages
 
-        # Convert lists back to sets for breadcrumbs, persuasion_targets
-        for key in ["breadcrumbs", "persuasion_targets"]:
-            if key in loaded_state and isinstance(loaded_state[key], list):
-                loaded_state[key] = set(to_tuple(item) for item in loaded_state[key])
+            # Convert string keys back into tuples for room_flavor_used
+            if "room_flavor_used" in loaded_state:
+                flavor = {}
+                for key, value in loaded_state["room_flavor_used"].items():
+                    if isinstance(key, str) and key.startswith("(") and "," in key:
+                        x, y = map(int, key.strip("()").split(","))
+                        flavor[(x, y)] = value
+                    elif isinstance(key, tuple):
+                        flavor[key] = value
+                loaded_state["room_flavor_used"] = flavor
 
-        # Convert position from list to tuple
-        if "position" in loaded_state and isinstance(loaded_state["position"], list):
-            loaded_state["position"] = tuple(loaded_state["position"])
+            # Convert lists back to sets for breadcrumbs, persuasion_targets
+            for key in ["breadcrumbs", "persuasion_targets"]:
+                if key in loaded_state and isinstance(loaded_state[key], list):
+                    loaded_state[key] = set(to_tuple(item) for item in loaded_state[key])
+
+            # Ensure breadcrumbs exists and is a set of tuples
+            if "breadcrumbs" not in loaded_state or not isinstance(loaded_state["breadcrumbs"], set):
+                loaded_state["breadcrumbs"] = set()
+            else:
+                loaded_state["breadcrumbs"] = set(to_tuple(item) for item in loaded_state["breadcrumbs"])
+
+            # Convert position from list to tuple
+            if "position" in loaded_state and isinstance(loaded_state["position"], list):
+                loaded_state["position"] = tuple(loaded_state["position"])
 
             game_state.update(loaded_state)
 
@@ -439,7 +446,7 @@ def load_game():
         print(f"Error loading game: {e}")
         input("\nPress Enter to return.")
         title_screen()
-
+        
 def move_to_new_room(direction=None):
     x, y = game_state["position"]
     moves = {
