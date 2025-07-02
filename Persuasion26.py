@@ -1680,15 +1680,17 @@ def title_screen():
  | |  |  __/ |  \__ \ |_| | (_| \__ \ | (_) | | | |
  |_|   \___|_|  |___/\__,_|\__,_|___/_|\___/|_| |_|
                                                   
-        
+    
     """)
     delay_print("A Victorian Roguelike Mystery!")
 
     print("[1] Begin New Investigation")
     print("[2] On the Art of Persuasion")
     print("[3] Instructions")
-    print("[4] Load Game")
-    print("[5] Quit")
+    print("[4] The Setting")
+    print("[5] The Mystery")
+    print("[6] Load Game")
+    print("[7] Quit")
 
     user_input = input("\n> ").strip().lower()
 
@@ -1700,8 +1702,14 @@ def title_screen():
     elif user_input == "3":
         instructions()
     elif user_input == "4":
+        show_setting()
+        title_screen()
+    elif user_input == "5":
+        show_mystery()
+        title_screen()
+    elif user_input == "6":
         load_game()
-    elif user_input == "5" or user_input == "quit" or user_input == "q" or user_input == "exit":
+    elif user_input == "7" or user_input == "quit" or user_input == "q" or user_input == "exit":
         delay_print("Thank you for playing! Goodbye.")
         exit()
     else:
