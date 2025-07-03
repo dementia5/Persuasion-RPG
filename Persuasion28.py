@@ -1344,8 +1344,12 @@ def render_map(show_npcs=False, fog_of_war=False):
             elif (not fog_of_war and pos in game_state["visited_locations"]) or (fog_of_war and pos in breadcrumbs):
                 loc = game_state["visited_locations"].get(pos, "Empty Room")
                 if loc == "Empty Room":
-                    char = " ◉ "
-                    color = GREY
+                    if pos in breadcrumbs:
+                        char = " ◉ "
+                        color = GREY  # Visited empty room
+                    else:
+                        char = " ◉ "
+                        color = GREEN  # Unvisited empty room
                 elif loc == "Cellar":
                     char = " E "
                     color = YELLOW
@@ -2196,17 +2200,18 @@ def interrogate_suspect():
                 if desc:
                     delay_print(desc)
                 delay_print(f"You confront {suspect['name']}.")
+
                 asked_question = False  # Track if any of [A], [M], [T], [S] has been asked
                 info_shown = False      # Track if info block has been shown
 
                 while True:
                     print("\nOptions:")
                     options = set()
-                            
+
                     if asked_question:
                         print("[J] Enter this testimony in your journal")
                         options = {"j"}
-                        if suspect["credibility"] < 5:
+                        if suspect.get("credibility", 5) < 5:
                             print(f"{ORANGE}[P] PERSUADE them to reveal more{RESET}")
                             options.add("p")
                         if game_state["clues"]:
@@ -2216,8 +2221,6 @@ def interrogate_suspect():
                     options.add("o")
                     print("[L] Leave interrogation")
                     options.add("l")
-                    print("[R] Return to action menu")
-                    options.add("r")
                     print("[A] Ask about their relationship to the Bishop")
                     options.add("a")
                     print("[M] Ask about their motive")
@@ -2226,6 +2229,8 @@ def interrogate_suspect():
                     options.add("t")
                     print("[S] Ask who they suspect")
                     options.add("s")
+                    print("[R] Return to action menu")
+                    options.add("r")
 
                     choice = input("> ").strip().lower()
 
@@ -2314,30 +2319,25 @@ def interrogate_suspect():
                         continue
 
                     elif choice == "j" and "j" in options:
-                        motive_short = suspect.get("motive", "Unknown")
-                        motive_long = ""
-                        for pool in motive_pools:
-                            for m in pool:
-                                if m["short"] == motive_short:
-                                    motive_long = m["long"]
-                                    break
-                        prob = motive_probability(game_state.get("perception", 0))
-                        prob_str = f"{ORANGE}{prob}%{RESET}" if prob == 100 else f"{ORANGE}~{prob}%{RESET}"
-                        credibility = f"{ORANGE}{suspect.get('credibility', 0)}/10{RESET}"
-                        alibi_weight = f"{ORANGE}{suspect.get('alibi_weight', 2)}/4{RESET}"
-                        journal_entry = (
-                            f"Location: {game_state['location']}\n"
-                            f"Suspect: {suspect['name']} (Motive: {motive_short} [{prob_str}])\n"
-                            f"  Motive Detail: {motive_long}\n"
-                            f"Credibility: {credibility}  # Overall trustworthiness of the suspect\n"
-                            f"Alibi: {suspect['alibi']} (Credibility {alibi_weight})  # Their claimed whereabouts and how believable it is\n"
-                            "-----------------------------"
-                        )
-                        if journal_entry in game_state["journal"]:
-                            delay_print("Testimony already recorded in your journal.")
+                        # Option 2: Record detailed testimony/alibi/suspect response in journal
+                        entries = []
+                        if asked_question:
+                            entries.append(f"Testimony from {suspect['name']} at {game_state['location']}:")
+                            if "relationship" in suspect:
+                                entries.append(f"  Relationship: {suspect.get('relationship', 'No details.')}")
+                            if "motive" in suspect:
+                                entries.append(f"  Motive: {suspect.get('motive', 'No details.')}")
+                            if "alibi" in suspect:
+                                entries.append(f"  Alibi: {suspect.get('alibi', 'No details.')}")
+                            entries.append("-----------------------------")
+                            journal_entry = "\n".join(entries)
+                            if journal_entry in game_state["journal"]:
+                                delay_print("Testimony already recorded in your journal.")
+                            else:
+                                game_state["journal"].append(journal_entry)
+                                delay_print("Testimony recorded in your journal.")
                         else:
-                            game_state["journal"].append(journal_entry)
-                            delay_print("Testimony recorded in your journal.")
+                            delay_print("Ask at least one question before recording testimony.")
                         wait_for_space()
                         continue
 
@@ -2355,6 +2355,10 @@ def interrogate_suspect():
                                     suspect["credibility"] = max(0, suspect["credibility"] - 2)
                                     delay_print("They stammer and contradict themselves. You sense they're hiding something.")
                                     game_state["score"] += 15
+                                    # Record confrontation in journal
+                                    game_state["journal"].append(
+                                        f"Confronted {suspect['name']} with clue: {clue} at {game_state['location']}"
+                                    )
                                 else:
                                     delay_print("The suspect scoffs at your accusation.")
                                     suspect["credibility"] = max(0, suspect["credibility"] - 1)
@@ -2366,28 +2370,56 @@ def interrogate_suspect():
                         if roll >= 12:
                             delay_print(f"(Observation check: Perception + die roll = {roll})")
                             delay_print("You notice a nervous tic. The suspect is definitely hiding something.")
+                            # Record observation in journal
+                            game_state["journal"].append(
+                                f"Observed {suspect['name']}'s body language at {game_state['location']}: hiding something."
+                            )
                         else:
                             delay_print("You can't read their body language this time.")
                         wait_for_space()
                         continue
 
                     elif choice == "a" and "a" in options:
-                        delay_print(f"{suspect['name']} says: '{suspect.get('relationship', 'I had my reasons for being here, but the Bishop and I were not close.')}'")
+                        rel = suspect.get('relationship', 'I had my reasons for being here, but the Bishop and I were not close.')
+                        delay_print(f"{suspect['name']} says: '{rel}'")
+                        # Record relationship testimony
+                        game_state["journal"].append(
+                            f"Testimony from {suspect['name']} at {game_state['location']}: Relationship: {rel}"
+                        )
+                        asked_question = True
                         wait_for_space()
                         continue
 
                     elif choice == "m" and "m" in options:
-                        delay_print(f"{suspect['name']} says: '{suspect.get('motive', 'I had no reason to harm the Bishop.')}'")
+                        mot = suspect.get('motive', 'I had no reason to harm the Bishop.')
+                        delay_print(f"{suspect['name']} says: '{mot}'")
+                        # Record motive testimony
+                        game_state["journal"].append(
+                            f"Testimony from {suspect['name']} at {game_state['location']}: Motive: {mot}"
+                        )
+                        asked_question = True
                         wait_for_space()
                         continue
 
                     elif choice == "t" and "t" in options:
-                        delay_print(f"{suspect['name']} says: '{suspect.get('alibi', 'I was alone, and no one can confirm my whereabouts.')}'")
+                        alibi = suspect.get('alibi', 'I was alone, and no one can confirm my whereabouts.')
+                        delay_print(f"{suspect['name']} says: '{alibi}'")
+                        # Record alibi testimony
+                        game_state["journal"].append(
+                            f"Testimony from {suspect['name']} at {game_state['location']}: Alibi: {alibi}"
+                        )
+                        asked_question = True
                         wait_for_space()
                         continue
 
                     elif choice == "s" and "s" in options:
-                        delay_print(f"{suspect['name']} says: 'If you ask me, {random.choice([s['name'] for s in game_state['suspects'] if s['name'] != suspect['name']])} seemed suspicious.'")
+                        other_name = random.choice([s['name'] for s in game_state['suspects'] if s['name'] != suspect['name']])
+                        delay_print(f"{suspect['name']} says: 'If you ask me, {other_name} seemed suspicious.'")
+                        # Record suspicion testimony
+                        game_state["journal"].append(
+                            f"Testimony from {suspect['name']} at {game_state['location']}: Suspects {other_name}"
+                        )
+                        asked_question = True
                         wait_for_space()
                         continue
 
@@ -2734,11 +2766,11 @@ def character_creation():
         return
 
     background_descriptions = {
-            "Theologian": "A scholar of faith and doctrine, versed in the mysteries of the divine and the hidden heresies of the world. Your insight into religious matters is unmatched, and your presence brings comfort—or unease—to those around you.",
-            "Occultist": "A seeker of forbidden knowledge, drawn to the shadows where others fear to tread. You have glimpsed truths that strain the mind, and your sanity is both your shield and your burden.",
-            "Detective": "A master of observation and deduction, trained to see what others overlook. Your keen perception cuts through deception, and your logical mind is your greatest weapon.",
-            "Priest": "A shepherd of souls, balancing compassion with conviction. Your faith is a bulwark against darkness, and your words can inspire hope or dread in equal measure."
-        }
+    "Theologian": f"{YELLOW}A scholar of faith and doctrine, versed in the mysteries of the divine and the hidden heresies of the world. Your insight into religious matters is unmatched, and your presence brings comfort—or unease—to those around you.{RESET}",
+    "Occultist": f"{YELLOW}A seeker of forbidden knowledge, drawn to the shadows where others fear to tread. You have glimpsed truths that strain the mind, and your sanity is both your shield and your burden.{RESET}",
+    "Detective": f"{YELLOW}A master of observation and deduction, trained to see what others overlook. Your keen perception cuts through deception, and your logical mind is your greatest weapon.{RESET}",
+    "Priest": f"{YELLOW}A shepherd of souls, balancing compassion with conviction. Your faith is a bulwark against darkness, and your words can inspire hope or dread in equal measure.{RESET}"
+}
     desc = background_descriptions.get(game_state["background"])
     if desc:
         delay_print(f"\n{desc}\n")
@@ -2880,7 +2912,7 @@ def start_first_case():
     # Announce Bishop's last known location and time at the start of the case
     last_loc = game_state.get("bishop_last_location", "an unknown location")
     last_time = game_state.get("bishop_last_time", "an unknown time")
-    delay_print(f"The Bishop was last seen in the {last_loc} at {last_time}.")
+    # delay_print(f"The Bishop was last seen in the {last_loc} at {last_time}.")
 
     describe_room()
 
