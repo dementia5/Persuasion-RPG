@@ -66,6 +66,7 @@ game_state["persuasion_active"] = False
 game_state["persuasion_rounds"] = 0
 game_state["persuasion_uses"] = 0
 game_state["persuasion_targets"] = set()
+game_state["chapel_pray_cooldown"] = 0
 
 # chosen_motive_pool = random.choice(motive_pools)
 # chosen_alibi_pool = random.choice(alibi_pools)
@@ -82,83 +83,99 @@ game_state["persuasion_targets"] = set()
 # game_state["score"] -= 1
 # game_state["score_log"].append("Turn taken [-1]")
 
+motive_descriptions = {
+    "Fanaticism": "Their eyes burn with a wild, unyielding light, as if they alone can see some hidden truth in the darkness. Their hands tremble with fervor, clutching at a pendant or prayer beads as if for protection—or power. You sense a mind teetering on the edge of devotion and madness.",
+    "Revenge": "A simmering anger lurks beneath their calm exterior, every word edged with old wounds and bitter memory. Their gaze flickers with resentment, and you sense they have not forgotten past slights. The air around them feels charged, as if violence is never far from their thoughts.",
+    "Jealousy": "Their smile is brittle, their eyes darting to others with a mixture of longing and spite. Every gesture seems calculated, as if measuring themselves against invisible rivals. You sense a heart gnawed by envy, desperate for recognition.",
+    "Forbidden Love": "A haunted tenderness lingers in their expression, shadowed by guilt and longing. They speak in half-truths, guarding secrets that ache to be confessed. You sense a soul torn between passion and peril.",
+    "Desperation": "Their movements are restless, their words tinged with anxiety and a hint of pleading. You see the weight of debts and failures pressing down on them, driving them to the edge. Every glance is a search for escape—or salvation.",
+    "Ambition": "They carry themselves with calculated poise, eyes always searching for advantage. Their words are smooth, but you sense a hunger for power lurking beneath the surface. Nothing, it seems, would stand in the way of their ascent.",
+    "Obsession": "Their gaze is distant, fixed on patterns only they can see. They mutter to themselves, piecing together mysteries that may not exist. You sense a mind consumed by a single, all-devouring purpose.",
+    "Fear": "They flinch at every sound, eyes wide and haunted. Their voice quivers, and sweat beads on their brow. You sense they are driven by terror—of secrets, of discovery, of something unseen.",
+    "Blackmail": "They are guarded, every word weighed and measured. Their eyes flicker with calculation, as if always considering what you know—and what you might reveal. You sense they hold secrets, and are held by them in turn.",
+    "Guilt": "Their shoulders sag beneath an invisible burden, and their eyes avoid yours. Words come slowly, as if each is a confession. You sense a soul haunted by past misdeeds.",
+    "Loyalty": "They speak with conviction, their loyalty to another evident in every word. Yet there is a tension, as if torn between duty and conscience. You sense they would do anything to protect those they care for.",
+    "Resentment": "Their tone is clipped, their answers curt. Old grievances simmer just beneath the surface, coloring every interaction. You sense a grudge that has festered for years.",
+    "Zealotry": "Their faith is absolute, their certainty unshakeable. They speak as if on a mission ordained by higher powers. You sense a dangerous righteousness, blind to doubt or mercy.",
+    "Shame": "They shrink from your gaze, cheeks flushed with embarrassment. Their words are evasive, and they seem desperate to hide some personal failing. You sense a secret that corrodes from within.",
+    "Manipulation": "A sly smile plays at their lips, and their eyes never quite meet yours. Every answer feels rehearsed, every gesture calculated. You sense a master of deception, always playing a deeper game."
+}
 
-
-room_templates = room_templates = {
+room_templates = {
     "Foyer": [
-        "The grand entry is dimly lit. Dust motes float through the silence. You hear footsteps upstairs, then silence again."
+        "The grand entry is dimly lit, dust motes floating through the silence. You hear footsteps upstairs, then silence again, as if the house is holding its breath. The heavy doors behind you seem to close of their own accord, sealing you inside."
     ],
     "Main Hall": [
-        "A vast corridor stretches in both directions, portraits watching from above. The chandeliers sway slightly despite the still air. Something unseen seems to pace behind the walls."
+        "A vast corridor stretches in both directions, portraits watching from above with eyes that seem to follow your every move. The chandeliers sway slightly despite the still air, casting shifting shadows on the marble floor. Something unseen seems to pace behind the walls, its presence felt but never seen."
     ],
     "Library": [
-        "Bookshelves loom, many tomes written in languages you don’t recognize. A shattered inkwell and a missing journal page hint at a struggle. A cold draft whispers through the gaps in the shelves."
+        "Bookshelves loom, many tomes written in languages you don’t recognize. A shattered inkwell and a missing journal page hint at a struggle that took place here. A cold draft whispers through the gaps in the shelves, carrying the faint scent of old paper and secrets."
     ],
     "Study": [
-        "The desk is overturned. Scorched fragments of parchment litter the floor. A painting swings ajar, revealing a keyhole behind it."
+        "The desk is overturned, scattering scorched fragments of parchment across the floor. A painting swings ajar, revealing a keyhole behind it that begs investigation. The air is thick with the scent of burnt ink and desperation."
     ],
     "Cellar": [
-        "Wine racks cover the walls, but the air smells of rot, not spirits. Chains and dried herbs hang together—ritual or restraint? The earth floor squelches underfoot."
+        "Wine racks cover the walls, but the air smells of rot, not spirits. Chains and dried herbs hang together—ritual or restraint, it's hard to tell. The earth floor squelches underfoot, and something skitters just out of sight."
     ],
     "Parlor": [
-        "A cracked mirror leans against the fireplace, reflecting nothing. A half-burnt letter lies beside an empty tea cup. The fire is warm, but no logs burn."
+        "A cracked mirror leans against the fireplace, reflecting nothing but darkness. A half-burnt letter lies beside an empty tea cup, its contents lost to the flames. The fire is warm, but no logs burn, and the room feels oddly inhabited."
     ],
     "Chapel": [
-        "Faded icons peer down from peeling walls. A candle flickers beneath a statue whose face has been scratched out. Something shuffles in the pews when you aren’t looking."
+        "Faded icons peer down from peeling walls, their faces worn away by time and neglect. A candle flickers beneath a statue whose face has been scratched out, casting long shadows across the pews. Something shuffles in the darkness when you aren’t looking, and the silence feels sacred and heavy."
     ],
     "Conservatory": [
-        "Glass walls reveal the fog beyond, pressing inward. Overgrown vines have cracked through the tiles, and something glistens in the soil. A harp in the corner is missing a string."
+        "Glass walls reveal the fog beyond, pressing inward as if trying to enter. Overgrown vines have cracked through the tiles, and something glistens in the soil beneath your feet. A harp in the corner is missing a string, its remaining cords humming softly in the chill air."
     ],
     "Attic": [
-        "Dust coats everything in thick fur. Broken dolls and empty birdcages fill the room. You hear a child’s whisper, but the room is empty."
+        "Dust coats everything in thick fur, muffling your footsteps. Broken dolls and empty birdcages fill the room, their glassy eyes and open doors hinting at stories best forgotten. You hear a child’s whisper, but the room is empty and cold."
     ],
     "Laboratory": [
-        "Vials and beakers line scorched tables. Something green bubbles inside a jar marked 'DO NOT OPEN'. Scratches on the wall form incomplete equations."
+        "Vials and beakers line scorched tables, their contents long since evaporated or spilled. Something green bubbles inside a jar marked 'DO NOT OPEN', casting an eerie glow. Scratches on the wall form incomplete equations, as if someone tried to solve a puzzle and failed."
     ],
     "Torture Chamber": [
-        "Instruments of pain are meticulously arranged, gleaming despite the filth. The walls are soundproofed with old cloth. A metal mask smiles eternally from the center table."
+        "Instruments of pain are meticulously arranged, gleaming despite the filth and dust. The walls are soundproofed with old cloth, muffling any sound you might make. A metal mask smiles eternally from the center table, daring you to look away."
     ],
     "Kitchen": [
-        "The air is thick with the scent of spoiled meat. Pots boil on their own, unattended. A bloodied apron hangs from a hook like a ghost’s robe."
+        "The air is thick with the scent of spoiled meat, making your stomach churn. Pots boil on their own, unattended, their contents bubbling ominously. A bloodied apron hangs from a hook like a ghost’s robe, swaying gently as if recently disturbed."
     ],
     "Smoking Room": [
-        "The scent of old tobacco lingers. Chairs face an empty hearth, their indentations fresh. A decanter trembles when you enter."
+        "The scent of old tobacco lingers, clinging to the velvet chairs and heavy drapes. Chairs face an empty hearth, their indentations fresh as if someone just left. A decanter trembles when you enter, sending ripples through the amber liquid inside."
     ],
     "Ballroom": [
-        "Cobwebs dance where dancers once did. A phonograph crackles but spins no disc. In the moonlight, footprints appear on the dust-polished floor."
+        "Cobwebs dance where dancers once did, draping the grand chandeliers in silver lace. A phonograph crackles but spins no disc, filling the silence with static. In the moonlight, footprints appear on the dust-polished floor, leading nowhere."
     ],
     "East Bedchamber": [
-        "The bed is made with surgical precision. A single rose lies across the pillow, already wilting. The window is nailed shut."
+        "The bed is made with surgical precision, its sheets crisp and untouched. A single rose lies across the pillow, already wilting and shedding petals. The window is nailed shut, and the air is heavy with the scent of faded perfume."
     ],
     "West Bedchamber": [
-        "Curtains flutter though no window is open. The mirror is draped in black cloth. Something breathes beneath the floorboards."
+        "Curtains flutter though no window is open, their movement unsettling in the stillness. The mirror is draped in black cloth, hiding whatever reflection might appear. Something breathes beneath the floorboards, slow and steady."
     ],
     "Servant's Quarters": [
-        "Bunks are made but still warm. A diary lies open on the floor, pages torn. You hear humming from the hallway, though no one approaches."
+        "Bunks are made but still warm, as if their occupants left only moments ago. A diary lies open on the floor, pages torn and ink smeared. You hear humming from the hallway, though no one approaches."
     ],
     "Dining Hall": [
-        "An enormous table is set for a feast no one attends. Mold creeps along the fine china. A chair at the head is pulled back—waiting."
+        "An enormous table is set for a feast no one attends, silverware gleaming in the candlelight. Mold creeps along the fine china, reclaiming the remnants of forgotten meals. A chair at the head is pulled back—waiting for someone who never arrives."
     ],
     "Gallery": [
-        "Portraits line the walls, but their faces have been scraped off. A crimson smear crosses the floor and disappears behind a velvet curtain. You sense the paintings still watch."
+        "Portraits line the walls, but their faces have been scraped off, leaving only blank ovals. A crimson smear crosses the floor and disappears behind a velvet curtain. You sense the paintings still watch, even without eyes."
     ],
     "Atrium": [
-        "Twilight filters through the stained-glass ceiling. Ivy curls around marble statues with hollow eyes. Water drips from somewhere unseen."
+        "Twilight filters through the stained-glass ceiling, painting the marble floor in shifting colors. Ivy curls around marble statues with hollow eyes, their expressions unreadable. Water drips from somewhere unseen, echoing through the vast space."
     ],
     "Solarium": [
-        "Rays of moonlight pour through broken panes. Potted plants have wilted into twisted shapes. A teacup rests beside a still-warm chair."
+        "Rays of moonlight pour through broken panes, illuminating dust motes in the air. Potted plants have wilted into twisted shapes, their leaves curling like claws. A teacup rests beside a still-warm chair, as if someone just left."
     ],
     "Observatory": [
-        "A great telescope points at nothing. Charts and star maps are strewn in disarray. Something scratched 'They are already here' into the oak railing."
+        "A great telescope points at nothing, its lens fogged with age. Charts and star maps are strewn in disarray across the tables. Something scratched 'They are already here' into the oak railing, the words deep and frantic."
     ],
     "Garden": [
-        "Overgrown paths wind through headless statuary. Roses bloom black in the moonlight. A rusted gate creaks open on its own."
+        "Overgrown paths wind through headless statuary, the roses blooming black in the moonlight. A rusted gate creaks open on its own, inviting you deeper into the tangled greenery. The air is thick with the scent of earth and something sweeter, almost cloying."
     ],
     "Horse Stable": [
-        "The stables smell of hay and rust. One stall door swings slowly, creaking on unseen hinges. Hoof prints lead out but never return."
+        "The stables smell of hay and rust, the scent mingling with something less pleasant. One stall door swings slowly, creaking on unseen hinges as if pushed by a phantom hand. Hoof prints lead out but never return, vanishing into the darkness."
     ],
     "Well House": [
-        "The well is sealed with iron chains. Scratches climb the stone from inside. A chill creeps up your spine, though no wind blows."
+        "The well is sealed with iron chains, their links cold and damp to the touch. Scratches climb the stone from inside, desperate and deep. A chill creeps up your spine, though no wind blows in this forgotten place."
     ]
 }
 
@@ -183,6 +200,13 @@ suspect_templates = [
 #                         game_state["walls"].add(((x, y), (nx, ny)))
 #                         game_state["walls"].add(((nx, ny), (x, y)))
 
+def wait_for_space(prompt="Press SPACE to continue."):
+    import msvcrt
+    print(prompt)
+    while True:
+        key = msvcrt.getch()
+        if key == b' ':
+            break
 
 def get_direction_from_arrow():
     """Wait for an arrow key and return 'n', 's', 'e', or 'w', or None if not an arrow."""
@@ -215,23 +239,28 @@ def show_setting():
         "\n"
         "You are an investigator, summoned by urgent letter to pierce the gloom and unravel the truth behind the manor’s growing legend. The night is thick with dread, and something ancient stirs beneath the veneer of civilization."
     )
-    input("\nPress Enter to return to the menu.")
+    wait_for_space()
 
 def show_mystery():
     clear()
     print("\033[1;32m=== THE MYSTERY ===\033[0m")
-    delay_print(
+    text = (
         "The Bishop Alaric Greaves—a powerful, controversial and enigmatic figure known for his fiery sermons and secretive habits—has vanished without a trace. "
         "Four suspects, each with their own secrets and motives, have been detained within the manor by the fearful townsfolk. "
         "The house itself seems to resist intrusion, its corridors shifting and its rooms echoing with the past.\n"
         "\n"
-        "Your task is clear: gather clues, collect alibis, and listen closely to the stories each suspect weaves. "
+        "Your task is clear: gather clues, collect alibis, and listen closely to the stories each suspect weaves.\n"
+    )
+    if "bishop_last_location" in game_state and "bishop_last_time" in game_state:
+        text += f"The Bishop was last seen in the {game_state['bishop_last_location']} at {game_state['bishop_last_time']}.\n"
+    text += (
         "Piece together the truth from your journal entries, for only by careful deduction can you hope to solve the mystery of the Bishop’s disappearance.\n"
         "\n"
         "Rumors speak of strange artifacts and forgotten relics hidden within the manor’s depths—items that may aid your investigation or test your resolve. "
         "The answers you seek lie somewhere within these haunted walls. Trust your wits, for the shadows are watching."
     )
-    input("\nPress Enter to return to the menu.")
+    delay_print(text)
+    wait_for_space()
 
 def show_how_to_play():
     clear()
@@ -245,6 +274,7 @@ def show_how_to_play():
         "\n"
         "Scattered throughout the manor are mysterious artifacts and items. Some may aid your investigation, others may test your resolve or sanity.\n"
         "\n"
+        "Once five clues are collected and two suspects interrogated you can attempt to solve the case by making an accusation. "
         "Movement is grid-based: use N/S/E/W or arrow keys to travel. The map and journal will help you keep track of your discoveries. "
         "Menus allow you to check your inventory, stats, and review your journal at any time.\n"
         "\n"
@@ -255,7 +285,7 @@ def show_how_to_play():
         "\n"
         "A much larger mystery lurks in the shadows of the manor. Trust your wits, gather evidence, and let deduction be your guide."
     )
-    input("\nPress Enter to return to the menu.")
+    wait_for_space()
 
 def show_persuasion_lore():
     clear()
@@ -279,7 +309,17 @@ def show_persuasion_lore():
         '“Even the most honeyed voice can become a howl if madness takes root.”\n'
         '\n'
     )
-    input("\nPress Enter to return to the menu.")
+    wait_for_space()
+
+import random
+
+def place_special_rooms():
+    # Example: Place the chapel randomly
+    possible_positions = [(x, y) for x in range(MAP_MIN, MAP_MAX+1) for y in range(MAP_MIN, MAP_MAX+1)]
+    possible_positions.remove(game_state["entrance"])  # Don't place chapel at entrance
+    chapel_pos = random.choice(possible_positions)
+    game_state["chapel"] = chapel_pos
+    game_state["rooms"][chapel_pos] = {"type": "Chapel", "visited": False}
 
 def generate_passages():
     """Generate a procedural map where each room has at most 4 exits, and all passages are consistent."""
@@ -682,6 +722,21 @@ artifact_pool = [
     }
 ]
 
+def motive_probability(perception):
+    # 18 = 100%, 15 = 90%, 12 = 75%, 10 = 60%, 8 = 50%, <8 = 35%
+    if perception >= 18:
+        return 100
+    elif perception >= 15:
+        return 90
+    elif perception >= 12:
+        return 75
+    elif perception >= 10:
+        return 60
+    elif perception >= 8:
+        return 50
+    else:
+        return 35
+    
 def assign_elder_sign_to_room():
     """Assign the Elder Sign to a random unique room at game start."""
     possible_rooms = list(room_templates.keys())
@@ -823,7 +878,7 @@ def save_game():
         print("Game saved.")
     except Exception as e:
         print(f"Error saving game: {e}")
-    input("Press Enter to continue.")
+    wait_for_space()
 
 def load_game():
     global game_state, previous_menu_function
@@ -889,7 +944,7 @@ def load_game():
             game_state.update(loaded_state)
 
             print("Game loaded.")
-            input("Press Enter to continue.")
+            wait_for_space()
 
             if game_state.get("location"):
                 previous_menu_function = describe_room
@@ -898,13 +953,26 @@ def load_game():
                 title_screen()
         else:
             print("No save file found.")
-            input("\nPress Enter to return.")
+            wait_for_space()
             title_screen()
     except Exception as e:
         print(f"Error loading game: {e}")
-        input("\nPress Enter to return.")
+        wait_for_space()
         title_screen()
         
+def pick_unique_initial_rooms(room_list, count, fixed_rooms):
+    """Pick up to `count` rooms from room_list, no two sharing the same first letter with each other or with fixed_rooms."""
+    used_letters = {room[0].upper() for room in fixed_rooms}
+    selected = []
+    for room in random.sample(room_list, len(room_list)):
+        first = room[0].upper()
+        if first not in used_letters:
+            selected.append(room)
+            used_letters.add(first)
+        if len(selected) == count:
+            break
+    return selected
+
 def move_to_new_room(direction=None, show_room=True):
     x, y = game_state["position"]
     moves = {
@@ -921,14 +989,14 @@ def move_to_new_room(direction=None, show_room=True):
     # Limit movement to within 16x16 grid
     if not (MAP_MIN <= new_x <= MAP_MAX and MAP_MIN <= new_y <= MAP_MAX):
         delay_print("You sense an unnatural barrier. The manor does not extend further in that direction.")
-        input("Press Enter to continue.")
+        wait_for_space()
         describe_room()
         return
 
     allowed_dirs = game_state["passages"].get((x, y), set())
     if direction not in allowed_dirs:
         delay_print("A wall or obstacle blocks your way. You cannot go that direction.")
-        input("Press Enter to continue.")
+        wait_for_space()
         describe_room()
         return
 
@@ -939,7 +1007,7 @@ def move_to_new_room(direction=None, show_room=True):
     new_pos = (new_x, new_y)
     if ((pos, new_pos) in walls) or ((pos, new_pos) in locked_doors):
         delay_print("A wall or locked door blocks your way.")
-        input("Press Enter to continue.")
+        wait_for_space()
         describe_room()
         return
 
@@ -969,7 +1037,7 @@ def move_to_new_room(direction=None, show_room=True):
         delay_print(f"You see someone here: {names}")
 
     if show_room:
-        input("Press Enter to enter the new room.")
+        wait_for_space()
         game_state["score"] -= 1  # Encourage efficiency
         describe_room()
 
@@ -1023,7 +1091,7 @@ def show_stats():
     delay_print(f"Background: {game_state['background']}")
     for stat in ["faith", "sanity", "perception", "strength", "stamina", "agility", "comeliness"]:
         delay_print(f"{stat.capitalize()}: {game_state[stat]}")
-    input("\nPress Enter to return.")
+    wait_for_space()
 
     if previous_menu_function:
         previous_menu_function()
@@ -1051,7 +1119,7 @@ def show_journal():
             delay_print(entry)
     if not clues and not artifacts and not responses:
         delay_print("Your journal is empty.")
-    input("\nPress Enter to return.")
+    wait_for_space()
     if previous_menu_function:
         previous_menu_function()
     else:
@@ -1065,7 +1133,7 @@ def show_quests():
             delay_print(f"- {quest}")
     else:
         delay_print("No active quests.")
-    input("\nPress Enter to return.")
+    wait_for_space()
 
     suspects_here = [
     s for s in game_state["suspects"]
@@ -1092,6 +1160,7 @@ def show_quests():
 
     x, y = game_state["position"]
     available_exits = [d.upper() for d in game_state["passages"].get((x, y), set())]
+    
     if available_exits:
         print(f"\nThere are exits: {', '.join(available_exits)}")
     else:
@@ -1109,7 +1178,7 @@ def show_quests():
             move_to_new_room(dir_input)
         else:
             delay_print("Unknown direction. Please enter a valid compass direction.")
-            input("Press Enter to continue.")
+            wait_for_space()
             describe_room()
     elif user_input == "3":
         show_map()
@@ -1272,11 +1341,17 @@ def render_map(show_npcs=False, fog_of_war=False):
                 color = ORANGE
                 if sanity < 4 and random.random() < 0.4:
                     char = " ? "
-            elif pos in game_state["visited_locations"]:
-                loc = game_state["visited_locations"][pos]
+            elif (not fog_of_war and pos in game_state["visited_locations"]) or (fog_of_war and pos in breadcrumbs):
+                loc = game_state["visited_locations"].get(pos, "Empty Room")
                 if loc == "Empty Room":
                     char = " ◉ "
-                    color = GREY  # Visited empty rooms are now gray
+                    color = GREY
+                elif loc == "Cellar":
+                    char = " E "
+                    color = YELLOW
+                elif loc in ("East Bedchamber", "West Bedchamber"):
+                    char = " R "
+                    color = YELLOW
                 else:
                     char = f" {loc[0]} "
                     color = YELLOW
@@ -1390,7 +1465,7 @@ def show_map_flow():
     print("             |")
     print("         [{0}]".format("Well House" if well_house else "??"))
     print()
-    input("Press Enter to return.")
+    wait_for_space()
     if previous_menu_function:
         previous_menu_function()
     else:
@@ -1434,7 +1509,7 @@ You, {game_state['name']}, are to be my cloaked investigator. Unravel the truth�
 
 — Commissioner of Police of the Metropolis
                     """)
-                    input("\nPress Enter to return.")
+                    wait_for_space()
 
                 elif item == "Elder Sign":
                     delay_print(
@@ -1442,17 +1517,22 @@ You, {game_state['name']}, are to be my cloaked investigator. Unravel the truth�
                         "Its lines twist in impossible angles, and the air around it feels subtly warped. "
                         "Legends say it wards off the Old Ones and brings strength to the faithful."
                     )
-                    input("\nPress Enter to return.")
+                    wait_for_space()
 
                 elif item == "Scrying Lens":
                     delay_print(
                         "Scrying Lens: A cloudy crystal lens set in tarnished silver. When held to the eye, it reveals the hidden movements of those who dwell within the manor."
                     )
-                    input("\nPress Enter to return.")
+                    wait_for_space()
 
                 else:
                     delay_print(f"You inspect the {item}.")
-                    input("\nPress Enter to return.")
+                    wait_for_space()
+                    if previous_menu_function:
+                        previous_menu_function()
+                    else:
+                        describe_room()
+                    return
                 show_inventory()
             elif idx == len(game_state["inventory"]):  # Return option
                 if previous_menu_function:
@@ -1465,7 +1545,7 @@ You, {game_state['name']}, are to be my cloaked investigator. Unravel the truth�
             show_inventory()
     else:
         delay_print(distort_text("Your inventory is empty.", game_state["sanity"]))
-        input("\nPress Enter to return.")
+        wait_for_space()
 
     if previous_menu_function:
         previous_menu_function()
@@ -1476,7 +1556,7 @@ def use_item():
     usable = [item for item in game_state["inventory"] if item in [a["name"] for a in artifact_pool + potion_pool]]
     if not usable:
         delay_print("You have no usable items.")
-        input("\nPress Enter to return.")
+        wait_for_space()
         show_inventory()
         return
     print("\nWhich item would you like to use?")
@@ -1547,14 +1627,14 @@ def use_item():
                     delay_print("You sense this key will open something important.")
                 # Remove after use (permanent effect)
                 game_state["inventory"].remove(item_name)
-                input("\nPress Enter to return.")
+                wait_for_space()
                 show_inventory()
                 return
             elif potion:
                 game_state[potion["effect"]] = min(18, game_state[potion["effect"]] + potion["amount"])
                 delay_print(f"You drink the {potion['name']}. {potion['desc']} (+{potion['amount']} {potion['effect'].capitalize()})")
                 game_state["inventory"].remove(potion["name"])
-                input("\nPress Enter to return.")
+                wait_for_space()
                 show_inventory()
                 return
         else:
@@ -1653,7 +1733,7 @@ def show_help():
     print("- score: Show your current score and scoring breakdown")
     print("- fight: Start a combat encounter with any suspect (debug)")
     print("- n/s/e/w/ne/nw/se/sw: Move in that direction from any screen")
-    input("\nPress Enter to return.")
+    wait_for_space()
 
     if previous_menu_function:
         previous_menu_function()
@@ -1666,13 +1746,13 @@ def look_around(pause=True, instant=False):
     first_sentence = descriptions[0].split(".")[0] + "."
     delay_print(first_sentence, speed=0 if instant else 0.01)
     if pause:
-        input("\nPress Enter to return.")
+        wait_for_space()
 
 def title_screen():
     global previous_menu_function
     previous_menu_function = title_screen
     clear()
-    print(r"""
+    print(YELLOW +r"""
   _____                              _             
  |  __ \                            (_)            
  | |__) |__ _ __ ___ _   _  __ _ ___ _  ___  _ __  
@@ -1681,7 +1761,7 @@ def title_screen():
  |_|   \___|_|  |___/\__,_|\__,_|___/_|\___/|_| |_|
                                                   
     
-    """)
+    """ + RESET)
     delay_print("A Victorian Roguelike Mystery!")
 
     print("[1] Begin New Investigation")
@@ -1723,7 +1803,7 @@ def instructions():
     delay_print("You play an investigator in a dark Victorian world of cults and mysteries.")
     delay_print("Global commands can be entered anytime (help, save, load, quit, back, menu, title).")
     delay_print("Optional commands include: journal, map, stats, quests, inventory.")
-    input("\nPress Enter to return.")
+    wait_for_space()
     title_screen()
 
 def distort_text(text, sanity):
@@ -1891,7 +1971,7 @@ def case_resolution():
         save_game()
     else:
         delay_print("There are still missing pieces. They flit just beyond comprehension like shadows behind stained glass.")
-    input("Press Enter to continue.")
+    wait_for_space()
     title_screen()
 
 def describe_room():
@@ -1952,12 +2032,16 @@ def describe_room():
     print("[3] Show map")
     print("[4] Check journal")
     print("[5] Check inventory")
+
+        # Chapel prayer option
+    if room == "Chapel":
+        print(f"{ORANGE}[P] Pray for guidance{RESET}")
     if suspects_here:
         suspect_names = ", ".join(s["name"] for s in suspects_here)
-        print(f"[6] Interrogate suspect ({suspect_names})")
+        print(f"{ORANGE}[6] Interrogate suspect ({suspect_names}){RESET}")
     # Only show case resolution if at least 5 clues and 2 suspects interrogated
     if len(game_state["clues"]) >= 5 and interrogated_count >= 2:
-        print("[7] ATTEMPT CASE RESOLUTION")
+        print(f"{ORANGE}[7] ATTEMPT CASE RESOLUTION{RESET}")
         case_resolution_available = True
     else:
         case_resolution_available = False
@@ -1977,6 +2061,19 @@ def describe_room():
         game_state["score_log"].append("Sanity dropped to 0 [-25]")
         game_state["sanity_zero_penalized"] = True
 
+    # game_state["bishop_location_announced"] = False
+# Announce Bishop's last known location and time ONCE, in ORANGE, and add to journal
+    if not game_state.get("bishop_location_announced", False):
+        last_loc = game_state.get("bishop_last_location", "an unknown location")
+        last_time = game_state.get("bishop_last_time", "an unknown time")
+        announcement = f"{ORANGE}The Bishop was last seen in the {last_loc} at {last_time}.{RESET}"
+        print(announcement)
+        # Add to journal in orange (strip color for journal if you want plain text)
+        journal_entry = f"{ORANGE}Bishop last seen: {last_loc} at {last_time}.{RESET}"
+        if journal_entry not in game_state["journal"]:
+            game_state["journal"].append(journal_entry)
+        game_state["bishop_location_announced"] = True
+
     print("\n(You can use arrow keys to move when prompted for a direction, but only on the 'Map' option.)")
     user_input = input("> ").strip().lower()
     if user_input == "1":
@@ -1985,7 +2082,7 @@ def describe_room():
         if game_state["turns"] % 15 == 0:
             game_state["score"] -= 1
             game_state["score_log"].append("15 turns taken [-1]")
-        input("Press Enter to return to the action menu.")
+        wait_for_space()
         describe_room()
         return
     elif user_input == "2":
@@ -2012,7 +2109,7 @@ def describe_room():
                         game_state["score_log"].append("15 turns taken [-1]")
                     return
             delay_print("Unknown direction. Please enter a valid compass direction or use arrow keys.")
-            input("Press Enter to continue.")
+            wait_for_space()
             describe_room()
     elif user_input == "3":
         show_map()
@@ -2030,6 +2127,23 @@ def describe_room():
         describe_room()
     elif user_input == "9" or user_input == "quit":
         title_screen()
+    elif user_input == "p" and room == "Chapel":
+        if game_state.get("chapel_pray_cooldown", 0) > 0:
+            delay_print(f"You sense the sacred silence has not yet returned. You must wait {game_state['chapel_pray_cooldown']} more turns before praying again.")
+        else:
+            delay_print("You kneel and pray. A sense of calm washes over you.")
+            before = game_state["sanity"]
+            game_state["sanity"] = min(game_state.get("max_sanity", 10), game_state["sanity"] + 1)
+            gained = game_state["sanity"] - before
+            if gained > 0:
+                delay_print(f"(Sanity restored: +{gained})")
+            else:
+                delay_print("(Your sanity is already at maximum.)")
+            game_state["journal"].append("Prayed for guidance in the chapel.")
+            game_state["chapel_pray_cooldown"] = 5  # 5 turns cooldown
+        wait_for_space()
+        describe_room()
+        return
     elif user_input == "f":
         print("\nChoose a suspect to fight:(DEBUG)")
         for i, s in enumerate(game_state["suspects"], 1):
@@ -2056,7 +2170,7 @@ def interrogate_suspect():
     ]
     if not suspects_here:
         delay_print("There is no one here to interrogate.")
-        input("Press Enter to continue.")
+        wait_for_space()
         describe_room()
         return
 
@@ -2064,7 +2178,7 @@ def interrogate_suspect():
         clear()
         print("\nChoose someone to interrogate:")
         for i, s in enumerate(suspects_here):
-            print(f"[{i+1}] {s['name']} – {s['trait']}")
+            print(f"[{i+1}] {s['name']}")
         print(f"[{len(suspects_here)+1}] Return")
 
         user_input = input("> ").strip().lower()
@@ -2078,6 +2192,9 @@ def interrogate_suspect():
                 suspect = suspects_here[idx]
                 game_state["suspects_interrogated"].add(suspect["name"])
                 clear()
+                desc = motive_descriptions.get(suspect.get("motive"), "")
+                if desc:
+                    delay_print(desc)
                 delay_print(f"You confront {suspect['name']}.")
                 asked_question = False  # Track if any of [A], [M], [T], [S] has been asked
                 info_shown = False      # Track if info block has been shown
@@ -2090,10 +2207,10 @@ def interrogate_suspect():
                         print("[J] Enter this testimony in your journal")
                         options = {"j"}
                         if suspect["credibility"] < 5:
-                            print("[P] PERSUADE them to reveal more")
+                            print(f"{ORANGE}[P] PERSUADE them to reveal more{RESET}")
                             options.add("p")
                         if game_state["clues"]:
-                            print("[C] Confront with a clue")
+                            print(f"{ORANGE}[C] Confront with a clue{RESET}")
                             options.add("c")
                     print("[O] Observe body language")
                     options.add("o")
@@ -2193,15 +2310,27 @@ def interrogate_suspect():
                         else:
                             delay_print("The suspect grows agitated and refuses to say more.")
                             suspect["credibility"] = max(0, suspect["credibility"] - 1)
-                        input("Press Enter to continue.")
+                        wait_for_space()
                         continue
 
                     elif choice == "j" and "j" in options:
+                        motive_short = suspect.get("motive", "Unknown")
+                        motive_long = ""
+                        for pool in motive_pools:
+                            for m in pool:
+                                if m["short"] == motive_short:
+                                    motive_long = m["long"]
+                                    break
+                        prob = motive_probability(game_state.get("perception", 0))
+                        prob_str = f"{ORANGE}{prob}%{RESET}" if prob == 100 else f"{ORANGE}~{prob}%{RESET}"
+                        credibility = f"{ORANGE}{suspect.get('credibility', 0)}/10{RESET}"
+                        alibi_weight = f"{ORANGE}{suspect.get('alibi_weight', 2)}/4{RESET}"
                         journal_entry = (
                             f"Location: {game_state['location']}\n"
-                            f"Suspect: {suspect['name']}\n"
-                            f"Credibility: {suspect.get('credibility', 0)}/10  # Overall trustworthiness of the suspect\n"
-                            f"Alibi: {suspect['alibi']} (Credibility {suspect.get('alibi_weight', 2)}/4)  # Their claimed whereabouts and how believable it is\n"
+                            f"Suspect: {suspect['name']} (Motive: {motive_short} [{prob_str}])\n"
+                            f"  Motive Detail: {motive_long}\n"
+                            f"Credibility: {credibility}  # Overall trustworthiness of the suspect\n"
+                            f"Alibi: {suspect['alibi']} (Credibility {alibi_weight})  # Their claimed whereabouts and how believable it is\n"
                             "-----------------------------"
                         )
                         if journal_entry in game_state["journal"]:
@@ -2209,7 +2338,7 @@ def interrogate_suspect():
                         else:
                             game_state["journal"].append(journal_entry)
                             delay_print("Testimony recorded in your journal.")
-                        input("Press Enter to continue.")
+                        wait_for_space()
                         continue
 
                     elif choice == "c" and "c" in options:
@@ -2229,7 +2358,7 @@ def interrogate_suspect():
                                 else:
                                     delay_print("The suspect scoffs at your accusation.")
                                     suspect["credibility"] = max(0, suspect["credibility"] - 1)
-                        input("Press Enter to continue.")
+                        wait_for_space()
                         continue
 
                     elif choice == "o" and "o" in options:
@@ -2239,27 +2368,27 @@ def interrogate_suspect():
                             delay_print("You notice a nervous tic. The suspect is definitely hiding something.")
                         else:
                             delay_print("You can't read their body language this time.")
-                        input("Press Enter to continue.")
+                        wait_for_space()
                         continue
 
                     elif choice == "a" and "a" in options:
                         delay_print(f"{suspect['name']} says: '{suspect.get('relationship', 'I had my reasons for being here, but the Bishop and I were not close.')}'")
-                        input("Press Enter to continue.")
+                        wait_for_space()
                         continue
 
                     elif choice == "m" and "m" in options:
                         delay_print(f"{suspect['name']} says: '{suspect.get('motive', 'I had no reason to harm the Bishop.')}'")
-                        input("Press Enter to continue.")
+                        wait_for_space()
                         continue
 
                     elif choice == "t" and "t" in options:
                         delay_print(f"{suspect['name']} says: '{suspect.get('alibi', 'I was alone, and no one can confirm my whereabouts.')}'")
-                        input("Press Enter to continue.")
+                        wait_for_space()
                         continue
 
                     elif choice == "s" and "s" in options:
                         delay_print(f"{suspect['name']} says: 'If you ask me, {random.choice([s['name'] for s in game_state['suspects'] if s['name'] != suspect['name']])} seemed suspicious.'")
-                        input("Press Enter to continue.")
+                        wait_for_space()
                         continue
 
                     elif choice == "l":
@@ -2275,7 +2404,7 @@ def interrogate_suspect():
                         continue
             else:
                 delay_print("Invalid selection.")
-                input("Press Enter to continue.")
+                wait_for_space()
                 continue
         else:
             handle_input(user_input, interrogate_suspect)
@@ -2288,7 +2417,7 @@ def dream_flashback():
     delay_print("You are dreaming... or remembering. A shiver creeps down your spine as your mind conjures the weight of memory.")
     delay_print("A chapel cloaked in shadow, the child's voice echoing like a song half-remembered. A locked door pulses in the back of your mind like a heartbeat.")
     delay_print("Whispers echo backward through time and thought. You wake gasping, the image of a burning sigil fading from your vision.")
-    input("Press Enter to continue.")
+    wait_for_space()
     intro_scene()
 
 def intro_scene():
@@ -2314,11 +2443,11 @@ def intro_scene():
                 delay_print("You search the grounds and find a bent key half-buried in the mud. It might open something inside.")
             else:
                 delay_print("You have already found the bent key.")
-            input("Press Enter to return to the menu.")
+            wait_for_space()
         elif user_input == "3":
             game_state["faith"] += 1
             delay_print("You pause and offer a silent prayer. You feel your faith strengthen (+1 Faith).")
-            input("Press Enter to return to the menu.")
+            wait_for_space()
         elif user_input == "4":
             character_creation()
             break
@@ -2332,8 +2461,15 @@ def enter_manor():
     global previous_menu_function
     previous_menu_function = enter_manor
     clear()
-    delay_print("You step into the manor, the scent of mildew thick in your nostrils. A shadow slips past the stairs, just at the edge of sight.")
-    input("Press Enter to continue.")
+    delay_print(
+    "You step into the manor, the scent of mildew thick in your nostrils. "
+    "The heavy door groans shut behind you, muffling the distant toll of church bells and sealing you in a hush broken only by the slow drip of unseen water. "
+    "Shadows cling to the corners, and the faded grandeur of the entrance hall seems to watch your every move, as if the house itself is holding its breath, waiting for you to trespass further."
+    )
+    delay_print("You feel a chill run down your spine as you realize the manor is not empty. The air is thick with secrets, and you sense that something is very wrong here.")
+    delay_print("You take a deep breath, steeling yourself for what lies ahead. The manor is a labyrinth of rooms and corridors, each holding its own mysteries and dangers. You must tread carefully, for the shadows may hold more than just dust and cobwebs.")
+    delay_print("You can feel the weight of the manor's history pressing down on you, urging you to uncover its hidden truths.")
+    wait_for_space()
     character_creation()
 
 def random_name():
@@ -2370,16 +2506,17 @@ def get_player_name():
 
 def generate_structured_map():
     """
-    Generate a manor map with 16 fixed rooms to fill more of the grid.
+    Generate a manor map with 16 fixed rooms and fill the rest with random rooms,
+    ensuring no two random rooms share the same first letter with each other or with the fixed rooms.
     """
     grid_half = 3  # For a 8x8 grid centered at (0,0)
-    # Choose 16 unique room names for fixed positions
+    # 16 fixed rooms for coverage
     fixed_room_names = [
         "Foyer", "Main Hall", "Manor Grounds", "Atrium", "Solarium", "Cellar",
         "Garden", "Observatory", "Well House", "Horse Stable",
         "Library", "Study", "Dining Hall", "Gallery", "Ballroom", "Chapel"
     ]
-    # Assign 16 unique positions for these rooms (spread out for coverage)
+    # Assign 16 unique positions for these rooms
     fixed_positions_list = [
         (0, 0), (0, -1), (0, 1), (-grid_half, 0), (grid_half, 0), (0, grid_half),
         (-grid_half - 1, 0), (grid_half + 1, 0), (0, grid_half + 1), (0, grid_half + 2),
@@ -2387,7 +2524,7 @@ def generate_structured_map():
     ]
     fixed_positions = dict(zip(fixed_positions_list, fixed_room_names))
 
-    # Assign remaining manor rooms randomly to available positions
+    # Find all remaining rooms not in fixed positions
     all_manor_rooms = [r for r in room_templates if r not in fixed_positions.values()]
     available_positions = []
     for x in range(-grid_half, grid_half + 1):
@@ -2396,13 +2533,34 @@ def generate_structured_map():
             if pos not in fixed_positions:
                 available_positions.append(pos)
     random.shuffle(available_positions)
+
+    # Helper to pick random rooms with unique first letters (not overlapping with fixed)
+    def pick_unique_initial_rooms(room_list, count, fixed_rooms):
+        used_letters = {room[0].upper() for room in fixed_rooms}
+        selected = []
+        for room in random.sample(room_list, len(room_list)):
+            first = room[0].upper()
+            if first not in used_letters:
+                selected.append(room)
+                used_letters.add(first)
+            if len(selected) == count:
+                break
+        return selected
+
+    # Pick random rooms for available positions, no shared first letter with fixed or each other
+    random_rooms = pick_unique_initial_rooms(all_manor_rooms, len(available_positions), fixed_room_names)
+    random_rooms_iter = iter(random_rooms)
+
     visited_locations = fixed_positions.copy()
-    empty_room_chance = 0.10  # Reduce empty rooms further since more are fixed
+    empty_room_chance = 0.10  # Some empty rooms for variety
     for pos in available_positions:
-        if all_manor_rooms and random.random() > empty_room_chance:
-            room = all_manor_rooms.pop()
-            visited_locations[pos] = room
-        else:
+        try:
+            if random.random() > empty_room_chance:
+                room = next(random_rooms_iter)
+                visited_locations[pos] = room
+            else:
+                visited_locations[pos] = "Empty Room"
+        except StopIteration:
             visited_locations[pos] = "Empty Room"
 
     # Build passages for fixed rooms (simple: connect to adjacent fixed rooms if possible)
@@ -2437,7 +2595,7 @@ def generate_structured_map():
     game_state["visited_locations"] = visited_locations
     game_state["passages"] = passages
     game_state["location"] = "Foyer"
-    game_state["position"] = (0, 0)
+    game_state["position"] = (0,0)  # Start at the Foyer
 
 def associate_culprit_and_pools():
     # 1. Pick which pool will be the "solution" pool for this game
@@ -2450,6 +2608,8 @@ def associate_culprit_and_pools():
     # 2. Pick a motive, alibi, and clue that match
     solution_motive = random.choice(motive_pool)
     solution_alibi = random.choice(alibi_pool)
+    game_state["bishop_last_location"] = solution_alibi["location"]
+    game_state["bishop_last_time"] = solution_alibi["time"]
     # Find a clue that matches both the motive and the alibi's location/time
     solution_clue = None
     for clue in clue_pool:
@@ -2460,7 +2620,8 @@ def associate_culprit_and_pools():
             break
     if not solution_clue:
         solution_clue = random.choice(clue_pool)
-
+        game_state["solution_clue"] = solution_clue
+        clue_locations[game_state["bishop_last_location"]] = game_state["solution_clue"]
     # Helper to assign alibi weight
     def alibi_weight(trait, motive, alibi_text):
         weight = 2  # Start at 2 (neutral)
@@ -2514,7 +2675,6 @@ def associate_culprit_and_pools():
     game_state["suspects"] = [culprit] + other_suspects
     game_state["clue_pool"] = clue_pool
     game_state["clue_motives"] = clue_motives
-    game_state["solution_clue"] = solution_clue
     game_state["solution_motive"] = solution_motive["short"]
     game_state["solution_alibi"] = solution_alibi
     game_state["murderer"] = culprit["name"]
@@ -2573,6 +2733,16 @@ def character_creation():
         character_creation()
         return
 
+    background_descriptions = {
+            "Theologian": "A scholar of faith and doctrine, versed in the mysteries of the divine and the hidden heresies of the world. Your insight into religious matters is unmatched, and your presence brings comfort—or unease—to those around you.",
+            "Occultist": "A seeker of forbidden knowledge, drawn to the shadows where others fear to tread. You have glimpsed truths that strain the mind, and your sanity is both your shield and your burden.",
+            "Detective": "A master of observation and deduction, trained to see what others overlook. Your keen perception cuts through deception, and your logical mind is your greatest weapon.",
+            "Priest": "A shepherd of souls, balancing compassion with conviction. Your faith is a bulwark against darkness, and your words can inspire hope or dread in equal measure."
+        }
+    desc = background_descriptions.get(game_state["background"])
+    if desc:
+        delay_print(f"\n{desc}\n")
+        
     # Only ask for gender if not auto-assign
     if not auto_assign:
         print("\nChoose your gender:")
@@ -2611,7 +2781,7 @@ def character_creation():
         print("\nManual stat entry complete.")
         for stat in stats_list:
             print(f"{stat.capitalize()}: {game_state[stat]}")
-        input("Press Enter to continue.")
+        wait_for_space()
     elif auto_assign:
         # Randomly distribute 6 points among stats (max 18 per stat)
         stat_points = 6
@@ -2627,7 +2797,7 @@ def character_creation():
         print("\nRandomly assigned attributes:")
         for stat in stats_list:
             print(f"{stat.capitalize()}: {game_state[stat]}")
-        input("Press Enter to continue.")
+        wait_for_space()
     else:
         # Point-buy: 6 points to distribute, min 3, max 18 per stat
         print("\nDistribute 6 points among your stats (base stats are randomly generated between 8 and 12, maximum 18 per stat).")
@@ -2667,7 +2837,7 @@ def character_creation():
         print("\nFinal attributes:")
         for stat in stats_list:
             print(f"{stat.capitalize()}: {game_state[stat]}")
-        input("Press Enter to continue.")
+        wait_for_space()
 
     game_state["inventory"].append("Envelope from the Commissioner")
 
@@ -2692,7 +2862,7 @@ def character_creation():
     print(f"Locked doors generated: {len(game_state['locked_doors'])}") # Debugging line
 
     delay_print(f"Welcome, {game_state['name']} the {game_state['background']}. The hour is late, and the shadows grow bold.")
-    input("Press Enter to begin.")
+    wait_for_space()
 
     assign_clues_to_rooms()
     assign_potions_to_rooms()
@@ -2706,13 +2876,19 @@ def start_first_case():
     global previous_menu_function
     previous_menu_function = start_first_case
     game_state["quests"].append("Investigate the disappearance of the Bishop.")
+
+    # Announce Bishop's last known location and time at the start of the case
+    last_loc = game_state.get("bishop_last_location", "an unknown location")
+    last_time = game_state.get("bishop_last_time", "an unknown time")
+    delay_print(f"The Bishop was last seen in the {last_loc} at {last_time}.")
+
     describe_room()
 
 def skill_check_combat(enemy_name, enemy_difficulty=None, stat=None):
     clear()
     suspect = next((s for s in game_state["suspects"] if s["name"] == enemy_name), None)
     delay_print(f"You face off against {enemy_name}. The air crackles with tension.")
-    input("Press Enter to continue.")
+    wait_for_space()
 
     player_stamina = game_state["stamina"]
     player_strength = game_state["strength"]
@@ -2830,7 +3006,7 @@ def skill_check_combat(enemy_name, enemy_difficulty=None, stat=None):
 
         delay_print(f"Your Stamina: {player_stamina} | {enemy_name}'s Stamina: {enemy_stamina}")
         round_num += 1
-        input("Press Enter to continue.")
+        wait_for_space()
 
     # End of combat (rest of your function unchanged)
     game_state["stamina"] = player_stamina
@@ -2857,17 +3033,17 @@ def skill_check_combat(enemy_name, enemy_difficulty=None, stat=None):
         delay_print(f"As {suspect['name']} falls, the truth is revealed: {suspect['name']} was the murderer all along!")
         delay_print("But justice through violence is not justice at all. The Commissioner is furious at your methods.")
         delay_print("You have failed to solve the mystery through deduction. The case is closed in disgrace.")
-        print(r"""
+        print(RED + r"""
  __     __           _                    
  \ \   / /          | |                   
   \ \_/ /__  _   _  | |     ___  ___  ___ 
    \   / _ \| | | | | |    / _ \/ __|/ _ \
     | | (_) | |_| | | |___| (_) \__ \  __/
     |_|\___/ \__,_| |______\___/|___/\___|
-    """)        
+    """ + RESET)        
         delay_print("Sorry!")
         show_score()
-        input("Press Enter to continue.")
+        wait_for_space()
         title_screen()
         return
 
@@ -2875,10 +3051,10 @@ def skill_check_combat(enemy_name, enemy_difficulty=None, stat=None):
         delay_print("You have succumbed to exhaustion. The investigation ends here.")
         game_state["score"] -= 35
         show_score()
-        input("Press Enter to continue.")
+        wait_for_space()
         title_screen()
     else:
-        input("Press Enter to continue.")
+        wait_for_space()
 
 # --- Main Menu ---
 title_screen()
