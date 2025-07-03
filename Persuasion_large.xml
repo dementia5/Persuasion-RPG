@@ -1,0 +1,89 @@
+<!-- Add these nodes and edges to your existing <graph> ... </graph> section -->
+
+<!-- Combat Decision Nodes -->
+<node id="combat_menu">
+  <data key="d0"><y:ShapeNode><y:NodeLabel>Combat Menu</y:NodeLabel></y:ShapeNode></data>
+</node>
+<node id="combat_fight">
+  <data key="d0"><y:ShapeNode><y:NodeLabel>Fight</y:NodeLabel></y:ShapeNode></data>
+</node>
+<node id="combat_flee">
+  <data key="d0"><y:ShapeNode><y:NodeLabel>Flee</y:NodeLabel></y:ShapeNode></data>
+</node>
+<node id="combat_trap">
+  <data key="d0"><y:ShapeNode><y:NodeLabel>Set Trap</y:NodeLabel></y:ShapeNode></data>
+</node>
+<node id="combat_win">
+  <data key="d0"><y:ShapeNode><y:NodeLabel>Win Combat</y:NodeLabel></y:ShapeNode></data>
+</node>
+<node id="combat_lose">
+  <data key="d0"><y:ShapeNode><y:NodeLabel>Lose Combat</y:NodeLabel></y:ShapeNode></data>
+</node>
+<node id="combat_flee_result">
+  <data key="d0"><y:ShapeNode><y:NodeLabel>Flee Result</y:NodeLabel></y:ShapeNode></data>
+</node>
+<node id="combat_trap_result">
+  <data key="d0"><y:ShapeNode><y:NodeLabel>Trap Result</y:NodeLabel></y:ShapeNode></data>
+</node>
+
+<!-- Interrogation Decision Nodes -->
+<node id="interrogate_menu">
+  <data key="d0"><y:ShapeNode><y:NodeLabel>Interrogation Menu</y:NodeLabel></y:ShapeNode></data>
+</node>
+<node id="interrogate_ask_bishop">
+  <data key="d0"><y:ShapeNode><y:NodeLabel>Ask about Bishop</y:NodeLabel></y:ShapeNode></data>
+</node>
+<node id="interrogate_ask_motive">
+  <data key="d0"><y:ShapeNode><y:NodeLabel>Ask about Motive</y:NodeLabel></y:ShapeNode></data>
+</node>
+<node id="interrogate_ask_alibi">
+  <data key="d0"><y:ShapeNode><y:NodeLabel>Ask about Alibi</y:NodeLabel></y:ShapeNode></data>
+</node>
+<node id="interrogate_ask_suspect">
+  <data key="d0"><y:ShapeNode><y:NodeLabel>Ask who they suspect</y:NodeLabel></y:ShapeNode></data>
+</node>
+<node id="interrogate_observe">
+  <data key="d0"><y:ShapeNode><y:NodeLabel>Observe body language</y:NodeLabel></y:ShapeNode></data>
+</node>
+<node id="interrogate_persuade">
+  <data key="d0"><y:ShapeNode><y:NodeLabel>Persuade</y:NodeLabel></y:ShapeNode></data>
+</node>
+<node id="interrogate_confront">
+  <data key="d0"><y:ShapeNode><y:NodeLabel>Confront with clue</y:NodeLabel></y:ShapeNode></data>
+</node>
+<node id="interrogate_journal">
+  <data key="d0"><y:ShapeNode><y:NodeLabel>Journal testimony</y:NodeLabel></y:ShapeNode></data>
+</node>
+
+<!-- Edges for Combat Decisions -->
+<edge source="skill_check_combat" target="combat_menu"/>
+<edge source="combat_menu" target="combat_fight"/>
+<edge source="combat_menu" target="combat_flee"/>
+<edge source="combat_menu" target="combat_trap"/>
+<edge source="combat_fight" target="combat_win"/>
+<edge source="combat_fight" target="combat_lose"/>
+<edge source="combat_flee" target="combat_flee_result"/>
+<edge source="combat_trap" target="combat_trap_result"/>
+<edge source="combat_win" target="describe_room"/>
+<edge source="combat_lose" target="case_resolution"/>
+<edge source="combat_flee_result" target="describe_room"/>
+<edge source="combat_trap_result" target="describe_room"/>
+
+<!-- Edges for Interrogation Decisions -->
+<edge source="interrogate_suspect" target="interrogate_menu"/>
+<edge source="interrogate_menu" target="interrogate_ask_bishop"/>
+<edge source="interrogate_menu" target="interrogate_ask_motive"/>
+<edge source="interrogate_menu" target="interrogate_ask_alibi"/>
+<edge source="interrogate_menu" target="interrogate_ask_suspect"/>
+<edge source="interrogate_menu" target="interrogate_observe"/>
+<edge source="interrogate_menu" target="interrogate_persuade"/>
+<edge source="interrogate_menu" target="interrogate_confront"/>
+<edge source="interrogate_menu" target="interrogate_journal"/>
+<edge source="interrogate_ask_bishop" target="describe_room"/>
+<edge source="interrogate_ask_motive" target="describe_room"/>
+<edge source="interrogate_ask_alibi" target="describe_room"/>
+<edge source="interrogate_ask_suspect" target="describe_room"/>
+<edge source="interrogate_observe" target="describe_room"/>
+<edge source="interrogate_persuade" target="describe_room"/>
+<edge source="interrogate_confront" target="describe_room"/>
+<edge source="interrogate_journal" target="describe_room"/>

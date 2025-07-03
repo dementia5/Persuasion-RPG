@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<graphml xmlns="http://graphml.graphdrawing.org/xmlns"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xmlns:y="http://www.yworks.com/xml/graphml"
+         xsi:schemaLocation="http://graphml.graphdrawing.org/xmlns
+         http://www.yworks.com/xml/schema/graphml/1.1/ygraphml.xsd">
+  <key id="d0" for="node" yfiles.type="nodegraphics"/>
+  <key id="d1" for="edge" yfiles.type="edgegraphics"/>
+  <graph id="G" edgedefault="directed">
+
+    <!-- Main Menu Nodes -->
+    <node id="title_screen">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>title_screen()</y:NodeLabel></y:ShapeNode></data>
+    </node>
+    <node id="dream_flashback">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>dream_flashback()</y:NodeLabel></y:ShapeNode></data>
+    </node>
+    <node id="show_persuasion_lore">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>show_persuasion_lore()</y:NodeLabel></y:ShapeNode></data>
+    </node>
+    <node id="instructions">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>instructions()</y:NodeLabel></y:ShapeNode></data>
+    </node>
+    <node id="show_setting">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>show_setting()</y:NodeLabel></y:ShapeNode></data>
+    </node>
+    <node id="show_mystery">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>show_mystery()</y:NodeLabel></y:ShapeNode></data>
+    </node>
+    <node id="load_game">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>load_game()</y:NodeLabel></y:ShapeNode></data>
+    </node>
+    <node id="exit">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>exit()</y:NodeLabel></y:ShapeNode></data>
+    </node>
+
+    <!-- Game Flow Nodes -->
+    <node id="intro_scene">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>intro_scene()</y:NodeLabel></y:ShapeNode></data>
+    </node>
+    <node id="character_creation">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>character_creation()</y:NodeLabel></y:ShapeNode></data>
+    </node>
+    <node id="start_first_case">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>start_first_case()</y:NodeLabel></y:ShapeNode></data>
+    </node>
+    <node id="describe_room">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>describe_room()</y:NodeLabel></y:ShapeNode></data>
+    </node>
+    <node id="case_resolution">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>case_resolution()</y:NodeLabel></y:ShapeNode></data>
+    </node>
+    <node id="show_score">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>show_score()</y:NodeLabel></y:ShapeNode></data>
+    </node>
+
+    <!-- Room Actions -->
+    <node id="interrogate_suspect">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>interrogate_suspect()</y:NodeLabel></y:ShapeNode></data>
+    </node>
+    <node id="skill_check_combat">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>skill_check_combat()</y:NodeLabel></y:ShapeNode></data>
+    </node>
+    <node id="show_map">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>show_map()</y:NodeLabel></y:ShapeNode></data>
+    </node>
+    <node id="show_inventory">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>show_inventory()</y:NodeLabel></y:ShapeNode></data>
+    </node>
+    <node id="show_journal">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>show_journal()</y:NodeLabel></y:ShapeNode></data>
+    </node>
+    <node id="show_quests">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>show_quests()</y:NodeLabel></y:ShapeNode></data>
+    </node>
+    <node id="save_game">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>save_game()</y:NodeLabel></y:ShapeNode></data>
+    </node>
+
+    <!-- Combat Decision Nodes -->
+    <node id="combat_menu">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>Combat Menu</y:NodeLabel></y:ShapeNode></data>
+    </node>
+    <node id="combat_fight">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>Fight</y:NodeLabel></y:ShapeNode></data>
+    </node>
+    <node id="combat_flee">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>Flee</y:NodeLabel></y:ShapeNode></data>
+    </node>
+    <node id="combat_trap">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>Set Trap</y:NodeLabel></y:ShapeNode></data>
+    </node>
+    <node id="combat_win">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>Win Combat</y:NodeLabel></y:ShapeNode></data>
+    </node>
+    <node id="combat_lose">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>Lose Combat</y:NodeLabel></y:ShapeNode></data>
+    </node>
+    <node id="combat_flee_result">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>Flee Result</y:NodeLabel></y:ShapeNode></data>
+    </node>
+    <node id="combat_trap_result">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>Trap Result</y:NodeLabel></y:ShapeNode></data>
+    </node>
+
+    <!-- Interrogation Decision Nodes -->
+    <node id="interrogate_menu">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>Interrogation Menu</y:NodeLabel></y:ShapeNode></data>
+    </node>
+    <node id="interrogate_ask_bishop">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>Ask about Bishop</y:NodeLabel></y:ShapeNode></data>
+    </node>
+    <node id="interrogate_ask_motive">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>Ask about Motive</y:NodeLabel></y:ShapeNode></data>
+    </node>
+    <node id="interrogate_ask_alibi">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>Ask about Alibi</y:NodeLabel></y:ShapeNode></data>
+    </node>
+    <node id="interrogate_ask_suspect">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>Ask who they suspect</y:NodeLabel></y:ShapeNode></data>
+    </node>
+    <node id="interrogate_observe">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>Observe body language</y:NodeLabel></y:ShapeNode></data>
+    </node>
+    <node id="interrogate_persuade">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>Persuade</y:NodeLabel></y:ShapeNode></data>
+    </node>
+    <node id="interrogate_confront">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>Confront with clue</y:NodeLabel></y:ShapeNode></data>
+    </node>
+    <node id="interrogate_journal">
+      <data key="d0"><y:ShapeNode><y:NodeLabel>Journal testimony</y:NodeLabel></y:ShapeNode></data>
+    </node>
+
+    <!-- Main Menu Edges -->
+    <edge source="title_screen" target="dream_flashback"/>
+    <edge source="title_screen" target="show_persuasion_lore"/>
+    <edge source="title_screen" target="instructions"/>
+    <edge source="title_screen" target="show_setting"/>
+    <edge source="title_screen" target="show_mystery"/>
+    <edge source="title_screen" target="load_game"/>
+    <edge source="title_screen" target="exit"/>
+
+    <!-- Game Flow Edges -->
+    <edge source="dream_flashback" target="intro_scene"/>
+    <edge source="intro_scene" target="character_creation"/>
+    <edge source="character_creation" target="start_first_case"/>
+    <edge source="start_first_case" target="describe_room"/>
+    <edge source="describe_room" target="interrogate_suspect"/>
+    <edge source="describe_room" target="skill_check_combat"/>
+    <edge source="describe_room" target="case_resolution"/>
+    <edge source="describe_room" target="show_map"/>
+    <edge source="describe_room" target="show_inventory"/>
+    <edge source="describe_room" target="show_journal"/>
+    <edge source="describe_room" target="show_quests"/>
+    <edge source="describe_room" target="save_game"/>
+    <edge source="case_resolution" target="show_score"/>
+    <edge source="show_score" target="title_screen"/>
+
+    <!-- Edges for Combat Decisions -->
+    <edge source="skill_check_combat" target="combat_menu"/>
+    <edge source="combat_menu" target="combat_fight"/>
+    <edge source="combat_menu" target="combat_flee"/>
+    <edge source="combat_menu" target="combat_trap"/>
+    <edge source="combat_fight" target="combat_win"/>
+    <edge source="combat_fight" target="combat_lose"/>
+    <edge source="combat_flee" target="combat_flee_result"/>
+    <edge source="combat_trap" target="combat_trap_result"/>
+    <edge source="combat_win" target="describe_room"/>
+    <edge source="combat_lose" target="case_resolution"/>
+    <edge source="combat_flee_result" target="describe_room"/>
+    <edge source="combat_trap_result" target="describe_room"/>
+
+    <!-- Edges for Interrogation Decisions -->
+    <edge source="interrogate_suspect" target="interrogate_menu"/>
+    <edge source="interrogate_menu" target="interrogate_ask_bishop"/>
+    <edge source="interrogate_menu" target="interrogate_ask_motive"/>
+    <edge source="interrogate_menu" target="interrogate_ask_alibi"/>
+    <edge source="interrogate_menu" target="interrogate_ask_suspect"/>
+    <edge source="interrogate_menu" target="interrogate_observe"/>
+    <edge source="interrogate_menu" target="interrogate_persuade"/>
+    <edge source="interrogate_menu" target="interrogate_confront"/>
+    <edge source="interrogate_menu" target="interrogate_journal"/>
+    <edge source="interrogate_ask_bishop" target="describe_room"/>
+    <edge source="interrogate_ask_motive" target="describe_room"/>
+    <edge source="interrogate_ask_alibi" target="describe_room"/>
+    <edge source="interrogate_ask_suspect" target="describe_room"/>
+    <edge source="interrogate_observe" target="describe_room"/>
+    <edge source="interrogate_persuade" target="describe_room"/>
+    <edge source="interrogate_confront" target="describe_room"/>
+    <edge source="interrogate_journal" target="describe_room"/>
+
+  </graph>
+</graphml>
