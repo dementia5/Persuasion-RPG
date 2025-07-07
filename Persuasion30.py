@@ -6,6 +6,7 @@ import time
 import random
 import json
 import sys
+import time
 import threading
 import msvcrt  # For Windows key detection
 
@@ -199,6 +200,77 @@ suspect_templates = [
 #                         # Store both directions for easy lookup
 #                         game_state["walls"].add(((x, y), (nx, ny)))
 #                         game_state["walls"].add(((nx, ny), (x, y)))
+
+import sys
+import time
+import msvcrt
+
+def timing_bullseye_chase(rounds=3, escape_distance=3):
+    print("A chase begins! Press SPACE when the red circle (●) is in the bullseye (◎)!")
+    positions = list(range(1, 22))  # 1 to 21
+    center = 11
+    distance = 2
+
+    while True:
+        pos = 1
+        direction = 1
+        hit = False
+        print(f"\nDistance from pursuer: {distance}")
+        print("Get ready...")
+
+        # Animate the cursor for a few cycles
+        start_time = time.time()
+        while time.time() - start_time < 3:  # 3 seconds per round
+            display = "|"
+            for i in range(1, 22):
+                if i == pos:
+                    display += f"{RED}◉{RESET}"
+                elif i == center:
+                    display += f"{YELLOW}◎{RESET}"
+                else:
+                    display += "."
+            display += "|"
+            sys.stdout.write("\r" + display)
+            sys.stdout.flush()
+            time.sleep(0.08)
+            pos += direction
+            if pos == 21 or pos == 1:
+                direction *= -1
+            if msvcrt.kbhit():
+                key = msvcrt.getch()
+                if key == b' ':
+                    if abs(pos - center) <= 1:
+                        hit = True
+                        break
+                    else:
+                        break
+        sys.stdout.write("\n")
+        if hit:
+            print("Bullseye! You gain ground!")
+            distance += 1
+        else:
+            print("Missed! The pursuer closes in!")
+            distance -= 1
+        if distance >= escape_distance:
+            print("You have escaped! The monster gives up the chase and slinks away into the shadows.")
+            wait_for_space("Press SPACE to continue.")
+            return True
+        elif distance <= 0:
+            print(RED + "The monster catches you and rips out your heart, devouring it before your dying eyes." + RESET)
+            print(RED + r"""
+__     __           _____  _          _ 
+ \ \   / /          |  __ \(_)        | |
+  \ \_/ /__  _   _  | |  | |_  ___  __| |
+   \   / _ \| | | | | |  | | |/ _ \/ _` |
+    | | (_) | |_| | | |__| | |  __/ (_| |
+    |_|\___/ \__,_| |_____/|_|\___|\__,_|
+    """ + RESET) 
+            game_state["stamina"] = 0
+            wait_for_space("Press SPACE to continue.")
+            show_score()
+            wait_for_space()
+            title_screen()
+            return False
 
 def wait_for_space(prompt="Press SPACE to continue."):
     import msvcrt
@@ -834,9 +906,9 @@ def delay_print(s, speed=0.01):
     thread = threading.Thread(target=check_space, daemon=True)
     thread.start()
 
-    for c in s:
+    for i, c in enumerate(s):
         if stop[0]:
-            print(s[s.index(c):], end='', flush=True)
+            print(s[i:], end='', flush=True)
             break
         print(c, end='', flush=True)
         time.sleep(speed)
@@ -990,26 +1062,66 @@ def move_to_new_room(direction=None, show_room=True):
     if not (MAP_MIN <= new_x <= MAP_MAX and MAP_MIN <= new_y <= MAP_MAX):
         delay_print("You sense an unnatural barrier. The manor does not extend further in that direction.")
         wait_for_space()
-        describe_room()
+        show_map()
         return
 
     allowed_dirs = game_state["passages"].get((x, y), set())
     if direction not in allowed_dirs:
         delay_print("A wall or obstacle blocks your way. You cannot go that direction.")
         wait_for_space()
-        describe_room()
+        show_map()
         return
 
-    # --- NEW: Block movement through walls and locked doors ---
+    # --- Block movement through walls and locked doors, and allow unlocking with a key ---
     walls = game_state.get("walls", set())
     locked_doors = game_state.get("locked_doors", set())
     pos = (x, y)
     new_pos = (new_x, new_y)
-    if ((pos, new_pos) in walls) or ((pos, new_pos) in locked_doors):
-        delay_print("A wall or locked door blocks your way.")
+    if ((pos, new_pos) in walls):
+        # Reveal both cells for wall rendering in fog of war
+        if "breadcrumbs" not in game_state or not isinstance(game_state["breadcrumbs"], set):
+            game_state["breadcrumbs"] = set()
+        game_state["breadcrumbs"].add(pos)
+        game_state["breadcrumbs"].add(new_pos)
+        delay_print("A wall blocks your way.")
         wait_for_space()
-        describe_room()
+        show_map()
         return
+    elif ((pos, new_pos) in locked_doors):
+        # Reveal both cells for door rendering in fog of war
+        if "breadcrumbs" not in game_state or not isinstance(game_state["breadcrumbs"], set):
+            game_state["breadcrumbs"] = set()
+        game_state["breadcrumbs"].add(pos)
+        game_state["breadcrumbs"].add(new_pos)
+        # Check for key in inventory
+        has_key = any(key in game_state["inventory"] for key in ["Strange Key", "Bent Key"])
+        if has_key:
+            print(f"{ORANGE}A locked door blocks your way. You have a key that might fit!{RESET}")
+            use = input("Use a key to unlock the door? (Y/N): ").strip().lower()
+            if use == "y":
+                # Remove one key from inventory (prioritize Strange Key)
+                for key in ["Strange Key", "Bent Key"]:
+                    if key in game_state["inventory"]:
+                        game_state["inventory"].remove(key)
+                        delay_print(f"You use the {key} to unlock the door.")
+                        break
+                # Unlock the door (remove from locked_doors both directions)
+                locked_doors.discard((pos, new_pos))
+                locked_doors.discard((new_pos, pos))
+                game_state["locked_doors"] = locked_doors
+                delay_print("The door unlocks with a satisfying click.")
+                wait_for_space()
+                # Now allow movement to proceed
+            else:
+                delay_print("You decide not to use a key right now.")
+                wait_for_space()
+                show_map()
+                return
+        else:
+            delay_print("A locked door blocks your way. You need a key to proceed.")
+            wait_for_space()
+            show_map()
+            return
 
     game_state["position"] = new_pos
 
@@ -1100,10 +1212,23 @@ def show_stats():
 
 def show_journal():
     clear()
+    # Offer toggle at the top
+    print(f"{ORANGE}Suspects marked with * are strong candidates for the culprit.{RESET}" if game_state.get("show_suspicion_hints", True) else "")
+    print(f"Hints are currently {'ON' if game_state.get('show_suspicion_hints', True) else 'OFF'}.")
+    print("[T] Toggle suspicion hints   [Enter] Continue\n")
+    choice = input("> ").strip().lower()
+    if choice == "t":
+        game_state["show_suspicion_hints"] = not game_state.get("show_suspicion_hints", True)
+        show_journal()
+        return
+
     delay_print("Journal Entries:")
     clues = [entry for entry in game_state["journal"] if entry.startswith("CLUE FOUND")]
     artifacts = [entry for entry in game_state["journal"] if entry.startswith("ARTIFACT FOUND")]
     responses = [entry for entry in game_state["journal"] if not entry.startswith("CLUE FOUND") and not entry.startswith("ARTIFACT FOUND")]
+
+    # Only show asterisk and suspicion note if hints are ON
+    show_hints = game_state.get("show_suspicion_hints", True)
 
     if clues:
         print("\n--- Clues Discovered ---")
@@ -1116,6 +1241,15 @@ def show_journal():
     if responses:
         print("\n--- Suspect Responses ---")
         for entry in responses:
+            # If hints are OFF, strip asterisk and suspicion note
+            if not show_hints and entry.startswith("* "):
+                lines = entry.split("\n")
+                # Remove asterisk and suspicion note if present
+                if lines[0].startswith("* "):
+                    lines[0] = lines[0][2:]
+                if len(lines) > 1 and "(This suspect is a strong candidate" in lines[1]:
+                    lines.pop(1)
+                entry = "\n".join(lines)
             delay_print(entry)
     if not clues and not artifacts and not responses:
         delay_print("Your journal is empty.")
@@ -1291,11 +1425,9 @@ def render_map(show_npcs=False, fog_of_war=False):
     HORZ_DOOR = "═"
     SPACE = " "
 
-
-
     sanity = game_state["sanity"]
     breadcrumbs = set(game_state.get("breadcrumbs", []))
-    breadcrumbs.add(game_state["position"])
+    breadcrumbs.add((px, py))
 
     # --- COMPRESSED LEGEND (2 columns) ---
     legend = {}
@@ -1312,44 +1444,38 @@ def render_map(show_npcs=False, fog_of_war=False):
         right = legend_items[i + col_len] if i + col_len < len(legend_items) else ""
         legend_lines.append(f"{left:<25} {right}")
 
-    # Ensure walls and locked_doors exist
     walls = game_state.get("walls", set())
     locked_doors = game_state.get("locked_doors", set())
-
     visited = set(game_state["visited_locations"].keys())
 
-    # Print map with vertical and horizontal walls/doors
     for row_idx, y in enumerate(range(py - half, py + half + 1)):
         row = ""
         for x in range(px - half, px + half + 1):
             pos = (x, y)
-            # --- FOG OF WAR: Only show visited rooms ---
-            if fog_of_war and pos not in visited:
+            # --- FOG OF WAR: Only show cells in breadcrumbs ---
+            if fog_of_war and pos not in breadcrumbs:
                 row += "   "
-                row += SPACE
                 continue
 
-            char = " ◉ "
-            color = GREEN
+            # Cell rendering
             if pos == (px, py):
                 char = " @ "
                 color = CYAN
                 if sanity < 4 and random.random() < 0.5:
                     char = " # "
-            elif show_npcs and pos in suspect_positions:
+            elif show_npcs and pos in suspect_positions and (
+                    (not fog_of_war and pos in game_state["visited_locations"]) or
+                    (fog_of_war and pos in breadcrumbs)
+                ):
                 char = " " + "".join(suspect_positions[pos]) + " "
                 color = ORANGE
                 if sanity < 4 and random.random() < 0.4:
                     char = " ? "
-            elif (not fog_of_war and pos in game_state["visited_locations"]) or (fog_of_war and pos in breadcrumbs):
+            elif not fog_of_war and pos in game_state["visited_locations"]:
                 loc = game_state["visited_locations"].get(pos, "Empty Room")
                 if loc == "Empty Room":
-                    if pos in breadcrumbs:
-                        char = " ◉ "
-                        color = GREY  # Visited empty room
-                    else:
-                        char = " ◉ "
-                        color = GREEN  # Unvisited empty room
+                    char = " ◉ "
+                    color = GREEN
                 elif loc == "Cellar":
                     char = " E "
                     color = YELLOW
@@ -1361,22 +1487,34 @@ def render_map(show_npcs=False, fog_of_war=False):
                     color = YELLOW
                 if sanity < 4 and random.random() < 0.2:
                     char = random.choice([" ~ ", " * ", " % ", " $ "])
+            elif fog_of_war and pos in breadcrumbs:
+                char = f"{GREY} ◉ {RESET}"
+                color = ""
             else:
-                # Unvisited room
-                char = " ◉ "
-                color = GREEN
+                char = "   "
+                color = ""
             row += f"{color}{char}{RESET}"
 
-            # Draw vertical wall/door to the right of this cell, only if both cells are visited (for fog of war)
-            right_pos = (x + 1, y)
-            if fog_of_war and (pos not in visited or right_pos not in visited):
-                row += SPACE
-            elif ((pos, right_pos) in locked_doors):
-                row += VERT_DOOR
-            elif ((pos, right_pos) in walls):
-                row += VERT_WALL
-            else:
-                row += SPACE
+            # Only add vertical wall/space if not the last cell in the row
+            if x < px + half:
+                right_pos = (x + 1, y)
+                if fog_of_war:
+                    if pos in breadcrumbs and right_pos in breadcrumbs:
+                        if ((pos, right_pos) in locked_doors):
+                            row += VERT_DOOR
+                        elif ((pos, right_pos) in walls):
+                            row += VERT_WALL
+                        else:
+                            row += SPACE
+                    else:
+                        row += SPACE
+                else:
+                    if ((pos, right_pos) in locked_doors):
+                        row += VERT_DOOR
+                    elif ((pos, right_pos) in walls):
+                        row += VERT_WALL
+                    else:
+                        row += SPACE
         # Print the map row with the corresponding legend line (if any)
         if row_idx < len(legend_lines):
             print(f"{row}   {legend_lines[row_idx]}")
@@ -1389,50 +1527,44 @@ def render_map(show_npcs=False, fog_of_war=False):
             for x in range(px - half, px + half + 1):
                 pos = (x, y)
                 below_pos = (x, y + 1)
-                # Only show horizontal walls/doors if both cells are visited (for fog of war)
-                if fog_of_war and (pos not in visited or below_pos not in visited):
-                    wall_row += SPACE * 3
-                elif ((pos, below_pos) in locked_doors):
-                    wall_row += HORZ_DOOR * 3
-                elif ((pos, below_pos) in walls):
-                    wall_row += HORZ_WALL * 3
+                if fog_of_war:
+                    if pos in breadcrumbs and below_pos in breadcrumbs:
+                        if ((pos, below_pos) in locked_doors):
+                            wall_row += HORZ_DOOR * 3
+                        elif ((pos, below_pos) in walls):
+                            wall_row += HORZ_WALL * 3
+                        else:
+                            wall_row += SPACE * 3
+                    else:
+                        wall_row += SPACE * 3
                 else:
-                    wall_row += SPACE * 3
-                # Add a space or wall/door between cells
-                right_pos = (x + 1, y)
-                if fog_of_war and (pos not in visited or right_pos not in visited):
-                    wall_row += SPACE
-                elif ((pos, right_pos) in locked_doors):
-                    wall_row += VERT_DOOR
-                elif ((pos, right_pos) in walls):
-                    wall_row += VERT_WALL
-                else:
-                    wall_row += SPACE
+                    if ((pos, below_pos) in locked_doors):
+                        wall_row += HORZ_DOOR * 3
+                    elif ((pos, below_pos) in walls):
+                        wall_row += HORZ_WALL * 3
+                    else:
+                        wall_row += SPACE * 3
+                # Only add vertical wall/space if not the last cell in the row
+                if x < px + half:
+                    right_pos = (x + 1, y)
+                    if fog_of_war:
+                        if pos in breadcrumbs and right_pos in breadcrumbs:
+                            if ((pos, right_pos) in locked_doors):
+                                wall_row += VERT_DOOR
+                            elif ((pos, right_pos) in walls):
+                                wall_row += VERT_WALL
+                            else:
+                                wall_row += SPACE
+                        else:
+                            wall_row += SPACE
+                    else:
+                        if ((pos, right_pos) in locked_doors):
+                            wall_row += VERT_DOOR
+                        elif ((pos, right_pos) in walls):
+                            wall_row += VERT_WALL
+                        else:
+                            wall_row += SPACE
             print(f"{wall_row}")
-
-    # Add to breadcrumbs after rendering
-    if "breadcrumbs" not in game_state:
-        game_state["breadcrumbs"] = set()
-    game_state["breadcrumbs"].add(game_state["position"])
-
-    # Whisper-like message
-    if sanity < 4 and random.random() < 0.5:
-        whispers = [
-            "You hear your name in the walls.",
-            "Something moves just out of sight.",
-            "The rooms are not where you left them.",
-            "Did you see that shadow move?",
-            "A voice whispers: 'Leave...'"
-        ]
-        delay_print(random.choice(whispers))
-
-    # --- Show available exits at the bottom of the map ---
-    x, y = game_state["position"]
-    available_exits = [d.upper() for d in game_state["passages"].get((x, y), set())]
-    if available_exits:
-        print(f"\nAvailable exits: {', '.join(available_exits)}")
-    else:
-        print("\nThere are no available exits from this room.")
 
 def show_map_flow():
     """
@@ -1485,15 +1617,21 @@ def show_inventory():
         print(f"[{len(game_state['inventory'])+2}] Return")
         choice = input("\nSelect an item to inspect, use, or return: ")
 
-        # Handle case where user just presses Enter
+        # Allow pressing Enter to return to action menu
         if choice.strip() == "":
-            show_inventory()
+            if previous_menu_function:
+                previous_menu_function()
+            else:
+                describe_room()
             return
 
         if choice.isdigit():
             idx = int(choice) - 1
             if idx == len(game_state["inventory"]):  # Use an item
-                use_item()
+                if previous_menu_function:
+                    use_item(previous_menu_function)
+                else:
+                    use_item(describe_room)
                 return
             elif idx == len(game_state["inventory"]) + 1:  # Return
                 if previous_menu_function:
@@ -1514,7 +1652,6 @@ You, {game_state['name']}, are to be my cloaked investigator. Unravel the truth�
 — Commissioner of Police of the Metropolis
                     """)
                     wait_for_space()
-
                 elif item == "Elder Sign":
                     delay_print(
                         "Elder Sign: A strange, star-shaped talisman carved from ancient stone. "
@@ -1522,50 +1659,57 @@ You, {game_state['name']}, are to be my cloaked investigator. Unravel the truth�
                         "Legends say it wards off the Old Ones and brings strength to the faithful."
                     )
                     wait_for_space()
-
                 elif item == "Scrying Lens":
                     delay_print(
                         "Scrying Lens: A cloudy crystal lens set in tarnished silver. When held to the eye, it reveals the hidden movements of those who dwell within the manor."
                     )
                     wait_for_space()
-
                 else:
-                    delay_print(f"You inspect the {item}.")
+                    delay_print(f"You inspect the {item} but it does not demonstrate any special properties for immediate use.")
                     wait_for_space()
-                    if previous_menu_function:
-                        previous_menu_function()
-                    else:
-                        describe_room()
-                    return
-                show_inventory()
-            elif idx == len(game_state["inventory"]):  # Return option
+                # FIX: Always return to previous menu or action menu after inspecting
                 if previous_menu_function:
                     previous_menu_function()
                 else:
                     describe_room()
+                return
             else:
                 show_inventory()
+                return
         else:
             show_inventory()
+            return
     else:
         delay_print(distort_text("Your inventory is empty.", game_state["sanity"]))
         wait_for_space()
+        if previous_menu_function:
+            previous_menu_function()
+        else:
+            describe_room()
+        return
 
-    if previous_menu_function:
-        previous_menu_function()
-    else:
-        title_screen()
+def use_item(return_func=None):
+    # List of items to highlight in orange during combat
+    combat_highlight = {"Phial of Holy Water", "Silver Dagger"}
+    # Detect if called from combat by checking the return_func (lambda: None is used in combat)
+    from_combat = return_func is not None and getattr(return_func, "__name__", "") == "<lambda>"
 
-def use_item():
     usable = [item for item in game_state["inventory"] if item in [a["name"] for a in artifact_pool + potion_pool]]
     if not usable:
         delay_print("You have no usable items.")
         wait_for_space()
-        show_inventory()
+        if return_func:
+            return_func()
+        else:
+            show_inventory()
         return
+
     print("\nWhich item would you like to use?")
     for idx, name in enumerate(usable, 1):
-        print(f"[{idx}] {name}")
+        if from_combat and name in combat_highlight:
+            print(f"{ORANGE}[{idx}] {name}{RESET}")
+        else:
+            print(f"[{idx}] {name}")
     print(f"[{len(usable)+1}] Return")
     choice = input("> ").strip()
     if choice.isdigit():
@@ -1578,12 +1722,14 @@ def use_item():
             if artifact:
                 # Apply main effect
                 if artifact.get("effect") in game_state:
-                    game_state[artifact["effect"]] = min(18, game_state[artifact["effect"]] + artifact["amount"])
-                    delay_print(f"You use the {artifact['name']}. {artifact['desc']} (+{artifact['amount']} {artifact['effect'].capitalize()})")
+                    amt = artifact["amount"]
+                    if isinstance(amt, str) and amt.startswith("+"):
+                        amt = int(amt)
+                    game_state[artifact["effect"]] = min(18, game_state[artifact["effect"]] + int(amt))
+                    delay_print(f"You use the {artifact['name']}. {artifact['desc']} (+{amt} {artifact['effect'].capitalize()})")
                 # Apply side effect if any
                 if "side_effects" in artifact:
                     side_effects = artifact["side_effects"]
-                    # If it's a tuple, wrap it in a list
                     if isinstance(side_effects, tuple) and len(side_effects) == 2 and isinstance(side_effects[0], str):
                         side_effects = [side_effects]
                     for stat, amt in side_effects:
@@ -1632,15 +1778,28 @@ def use_item():
                 # Remove after use (permanent effect)
                 game_state["inventory"].remove(item_name)
                 wait_for_space()
-                show_inventory()
+                if return_func:
+                    return_func()
+                else:
+                    show_inventory()
                 return
+
             elif potion:
                 game_state[potion["effect"]] = min(18, game_state[potion["effect"]] + potion["amount"])
                 delay_print(f"You drink the {potion['name']}. {potion['desc']} (+{potion['amount']} {potion['effect'].capitalize()})")
                 game_state["inventory"].remove(potion["name"])
                 wait_for_space()
-                show_inventory()
+                if return_func:
+                    return_func()
+                else:
+                    show_inventory()
                 return
+        elif idx == len(usable):  # Return option
+            if return_func:
+                return_func()
+            else:
+                show_inventory()
+            return
         else:
             show_inventory()
     else:
@@ -1737,7 +1896,7 @@ def show_help():
     print("- score: Show your current score and scoring breakdown")
     print("- fight: Start a combat encounter with any suspect (debug)")
     print("- n/s/e/w/ne/nw/se/sw: Move in that direction from any screen")
-    wait_for_space()
+    wait_for_space("Press SPACE to continue.")
 
     if previous_menu_function:
         previous_menu_function()
@@ -1962,6 +2121,7 @@ def show_score():
     print("Stamina dropped to 0: -25")
     print("Sanity dropped to 0: -50")
     print("Killing any suspect: -30")
+    wait_for_space("Press SPACE to continue.")
 
 def case_resolution():
     delay_print("You gather your thoughts and review the case... Pages of notes flicker in your mind like a shuffled deck of ghosts.")
@@ -1983,6 +2143,8 @@ def describe_room():
     previous_menu_function = describe_room
     clear()
     room = game_state["location"]
+    if len(game_state["clues"]) >= 5 and interrogated_count >= 2:
+        print(f"{ORANGE}You feel you have gathered enough evidence to make an accusation. The truth is within your grasp...{RESET}")
     # --- Show room name at the top ---
     print(f"\n=== {room} ===\n")
     descriptions = room_templates.get(room, ["It's a bare and quiet room."])
@@ -2330,6 +2492,27 @@ def interrogate_suspect():
                             if "alibi" in suspect:
                                 entries.append(f"  Alibi: {suspect.get('alibi', 'No details.')}")
                             entries.append("-----------------------------")
+
+                            # --- Advanced suspicion marker ---
+                            suspicion_score = 0
+                            # 1. Low credibility
+                            if suspect.get("credibility", 5) <= 2:
+                                suspicion_score += 1
+                            # 2. Motive matches solution motive
+                            if suspect.get("motive") == game_state.get("solution_motive"):
+                                suspicion_score += 1
+                            # 3. Alibi is weak (weight 1 or 2)
+                            alibi_weight = suspect.get("alibi_weight", 2)
+                            if alibi_weight <= 2:
+                                suspicion_score += 1
+                            # 4. Opportunity (if tracked)
+                            if suspect.get("opportunity"):
+                                suspicion_score += 1
+
+                            if suspicion_score >= 2:
+                                entries[0] = "* " + entries[0]
+                                entries.insert(1, f"{ORANGE}(This suspect is a strong candidate for the culprit based on your deductions.){RESET}")
+
                             journal_entry = "\n".join(entries)
                             if journal_entry in game_state["journal"]:
                                 delay_print("Testimony already recorded in your journal.")
@@ -2995,6 +3178,46 @@ def skill_check_combat(enemy_name, enemy_difficulty=None, stat=None):
         if transformed:
             delay_print(f"Your Sanity: {game_state['sanity']}")
 
+        # --- Add combat options here ---
+        print("\nWhat will you do?")
+        print("[A] Attack")
+        print("[U] Use an item")
+        print("[F] Flee")
+        print("[S] Show stats")
+
+        action = input("> ").strip().lower()
+        if action == "u":
+            use_item(lambda: None)
+            # Update player stats in case a potion/artifact was used
+            player_stamina = game_state["stamina"]
+            player_strength = game_state["strength"]
+            player_agility = game_state["agility"]
+            continue  # Skip to next round after using an item
+        elif action == "s":
+            show_stats()
+            continue
+        elif action == "f":
+            if transformed:
+                print(f"{ORANGE}[F] Flee for your life!{RESET} or press Enter to stand your ground.")
+                flee_choice = input("> ").strip().lower()
+                if flee_choice == "f":
+                    escaped = timing_bullseye_chase()
+                    if escaped:
+                        delay_print("You manage to escape the horror and slam the door behind you!")
+                        wait_for_space()
+                        describe_room()
+                        return
+                    else:
+                        delay_print("The horror catches you! You are forced to fight for your life!")
+                        # Continue combat as normal
+            else:
+                delay_print(RED + "You attempt to flee, but your opponent lands a parting blow! (Stamina -2, Score -10)" + RESET)
+                game_state["stamina"] = max(0, game_state["stamina"] - 2)
+                game_state["score"] -= 10
+                wait_for_space()
+                describe_room()
+                return
+
         # Player's composite score
         player_base = (player_strength + player_stamina + player_agility) // 3
         player_roll = player_base + roll_fudge() + (player_agility - enemy_agility) // 2
@@ -3003,8 +3226,8 @@ def skill_check_combat(enemy_name, enemy_difficulty=None, stat=None):
         enemy_base = (enemy_strength + enemy_stamina + enemy_agility) // 3
         enemy_roll = enemy_base + roll_fudge() + (enemy_agility - player_agility) // 2
 
-        delay_print(f"Your combat score: {player_base} + die roll + agility mod = {player_roll}")
-        delay_print(f"Enemy combat score: {enemy_base} + die roll + agility mod = {enemy_roll}")
+        delay_print(f"Your combat score: {player_base} + die roll + agility mod = {YELLOW}{player_roll}{RESET}")
+        delay_print(f"Enemy combat score: {enemy_base} + die roll + agility mod = {YELLOW}{enemy_roll}{RESET}")
 
         if player_roll >= enemy_roll:
             # Player hits enemy
@@ -3024,6 +3247,19 @@ def skill_check_combat(enemy_name, enemy_difficulty=None, stat=None):
                     if suspect:
                         suspect["strength"] = enemy_strength
                     transformed = True
+                            # --- Offer flee option here ---
+                    print(f"{ORANGE}[F] Flee for your life!{RESET} or press Enter to stand your ground.")
+                    flee_choice = input("> ").strip().lower()
+                    if flee_choice == "f":
+                        escaped = timing_bullseye_chase()
+                        if escaped:
+                            delay_print("You manage to escape the horror and slam the door behind you!")
+                            wait_for_space()
+                            describe_room()
+                            return
+                        else:
+                            delay_print("The horror catches you! You are forced to fight for your life!")
+                            # Continue combat as normal
                 delay_print(f"Your Sanity: {game_state['sanity']}")
                 delay_print(ORANGE + random.choice(gory_flavor) + RESET)
                 delay_print(f"You lose {damage} stamina.")
@@ -3032,9 +3268,14 @@ def skill_check_combat(enemy_name, enemy_difficulty=None, stat=None):
                 game_state["sanity"] = max(0, game_state["sanity"] - 1)
                 sanity_lost = 2
             else:
-                delay_print(ORANGE + random.choice(enemy_flavor) + RESET)
-                delay_print(f"You lose {damage} stamina.")
-            player_stamina -= damage
+                if transformed:
+                    delay_print(ORANGE + random.choice(gory_flavor) + RESET)
+                    delay_print(f"You lose {damage} stamina.")
+                    delay_print("\n" + random.choice(horror_text))
+                else:
+                    delay_print(ORANGE + random.choice(enemy_flavor) + RESET)
+                    delay_print(f"You lose {damage} stamina.")
+                player_stamina -= damage
 
         delay_print(f"Your Stamina: {player_stamina} | {enemy_name}'s Stamina: {enemy_stamina}")
         round_num += 1
