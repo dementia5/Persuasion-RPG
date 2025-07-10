@@ -1651,6 +1651,13 @@ def save_game():
         if "passages" in game_state_copy:
             game_state_copy["passages"] = {str(k): list(v) for k, v in game_state_copy["passages"].items()}
 
+        # Handle suspect interrogation "asked" field conversion (set -> list)
+        # The "asked" field tracks which topics have been covered for each suspect
+        if "suspects" in game_state_copy:
+            for suspect in game_state_copy["suspects"]:
+                if "asked" in suspect and isinstance(suspect["asked"], set):
+                    suspect["asked"] = list(suspect["asked"])
+
         with open("savegame.json", "w") as f:
             json.dump(game_state_copy, f)
 
@@ -1744,6 +1751,20 @@ def load_game():
                         game_state[key] = set()
                 else:
                     game_state[key] = set()
+
+            # Handle suspect interrogation "asked" field conversion (list -> set)
+            # The "asked" field tracks which topics have been covered for each suspect
+            # and must be a set to support the .add() operations used in interrogation
+            if "suspects" in game_state:
+                for suspect in game_state["suspects"]:
+                    if "asked" in suspect:
+                        if isinstance(suspect["asked"], list):
+                            suspect["asked"] = set(suspect["asked"])
+                        elif not isinstance(suspect["asked"], set):
+                            suspect["asked"] = set()
+                    # If the field is missing entirely, initialize it as an empty set
+                    else:
+                        suspect["asked"] = set()
 
             print("Game loaded.")
             wait_for_space()
