@@ -1666,6 +1666,63 @@ def save_game():
         print(f"Error saving game: {e}")
     wait_for_space()
 
+def verify_save_file_integrity(filename="savegame.json"):
+    """
+    Optional verification function to check if a save file has correct data types.
+    This can be used to verify that the suspect interrogation serialization is working.
+    Returns True if valid, False otherwise.
+    """
+    try:
+        if not os.path.exists(filename):
+            print(f"Save file {filename} does not exist.")
+            return False
+        
+        with open(filename, 'r') as f:
+            data = json.load(f)
+        
+        print(f"Verifying save file integrity: {filename}")
+        
+        # Check if suspects exist
+        if 'suspects' not in data:
+            print("No suspects in save file - nothing to verify")
+            return True
+        
+        suspects = data['suspects']
+        if not isinstance(suspects, list):
+            print("ERROR: 'suspects' field is not a list")
+            return False
+        
+        # Check each suspect's 'asked' field
+        for i, suspect in enumerate(suspects):
+            if not isinstance(suspect, dict):
+                print(f"ERROR: Suspect {i} is not a dictionary")
+                return False
+            
+            name = suspect.get('name', f'Suspect {i}')
+            
+            if 'asked' in suspect:
+                asked = suspect['asked']
+                if isinstance(asked, list):
+                    print(f"OK: {name} has 'asked' as list: {asked}")
+                elif isinstance(asked, set):
+                    print(f"ERROR: {name} has 'asked' as set (should be list in save): {asked}")
+                    return False
+                else:
+                    print(f"ERROR: {name} has 'asked' with unexpected type {type(asked)}")
+                    return False
+            else:
+                print(f"OK: {name} missing 'asked' field (will be initialized on load)")
+        
+        print("Save file integrity check passed!")
+        return True
+        
+    except json.JSONDecodeError as e:
+        print(f"ERROR: Invalid JSON in save file: {e}")
+        return False
+    except Exception as e:
+        print(f"ERROR: Failed to verify save file: {e}")
+        return False
+
 def load_game():
     global game_state, previous_menu_function
     try:
