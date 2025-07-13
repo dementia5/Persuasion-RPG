@@ -1,6 +1,16 @@
 # Persuasion: Victorian Roguelike Investigation RPG Game
 # Core Game Script
 
+# Some mythos elements inspired by the works of H.P. Lovecraft (public domain).
+# Some die rolling mechanics inspired by the FUDGE RPG system by Steffan O'Sullivan and Grey Ghost Press. No FUDGE SRD text or proprietary content is included.
+#
+# All other code, story, and mechanics are original.
+#
+# # Persuasion is a Victorian roguelike investigation RPG set in a haunted manor shrouded in fog and cosmic dread.
+# You play as an investigator tasked with solving the mysterious disappearance of Bishop Alaric Greaves by gathering clues, interrogating suspects, and deducing the truth.
+# The game features grid-based exploration, randomized rooms, and supernatural events. Dice rolls, stat-based skill checks, and a unique persuasion system is used to break through suspect defenses.
+# Your choices, discoveries, and deductions shape the outcome—can you solve the case before madness or darkness claims you?
+
 import os
 import time
 import random
@@ -21,9 +31,9 @@ RESET = "\033[0m"
 
 # --- Global State ---
 
-MAP_MIN = -8
-MAP_MAX = 7
-MAP_SIZE = MAP_MAX - MAP_MIN + 1  # 16
+MAP_MIN = -4
+MAP_MAX = 4
+MAP_SIZE = MAP_MAX - MAP_MIN + 1  # 9
 MAP_CENTER = (MAP_SIZE // 2) - 1  # Center of the map grid
 
 DIRECTIONS = {
@@ -80,6 +90,92 @@ game_state["persuasion_rounds"] = 0
 game_state["persuasion_uses"] = 0
 game_state["persuasion_targets"] = set()
 game_state["chapel_pray_cooldown"] = 0
+game_state["crime_type"] = random.choice([
+    "murder", "kidnapping", "ritual sacrifice", "blackmail", "forced exile"
+])
+
+motive_pools = [
+    [
+        {"short": "Fanaticism", "long": "Driven by an obsessive devotion to forbidden rites and ancient faiths, often acting without regard for consequence."},
+        {"short": "Revenge", "long": "Always considers revenge as a first option due to a quick temper and a deep disgust with the church's hypocrisy."},
+        {"short": "Jealousy", "long": "Harbors envy for the Bishop's influence and resents being overlooked, fueling bitter rivalry."},
+        {"short": "Forbidden Love", "long": "Secretly in love with someone close to the Bishop, willing to do anything to protect or possess them."},
+        {"short": "Desperation", "long": "Haunted by debts and personal failures, willing to risk everything for a chance at redemption or escape."},
+        {"short": "Ambition", "long": "Sees the Bishop's disappearance as a stepping stone to greater power within the church or society."},
+        {"short": "Obsession", "long": "Fixated on unraveling cosmic mysteries, even at the cost of others' lives or sanity."},
+        {"short": "Fear", "long": "Terrified of secrets being revealed, acts out of self-preservation and paranoia."}
+    ],
+    [
+        {"short": "Blackmail", "long": "Holds or is held by dangerous secrets, manipulating others to maintain control."},
+        {"short": "Guilt", "long": "Haunted by past misdeeds, desperate to cover up involvement in earlier crimes."},
+        {"short": "Loyalty", "long": "Acts to protect a loved one or mentor, even if it means committing a terrible act."},
+        {"short": "Resentment", "long": "Nurtures a long-standing grudge against the Bishop for personal slights or injustices."},
+        {"short": "Zealotry", "long": "Believes the Bishop's removal is a holy duty, convinced of their own righteousness."},
+        {"short": "Shame", "long": "Driven by the need to hide a scandal or personal failing at any cost."},
+        {"short": "Manipulation", "long": "Sees others as pawns, orchestrating events to serve a hidden agenda."},
+        {"short": "Greed", "long": "Motivated by material gain, coveting the Bishop's wealth or relics."}
+    ],
+    [
+        {"short": "Remorse", "long": "Haunted by guilt, seeks to undo a past wrong even if it means drastic action."},
+        {"short": "Hatred", "long": "Harbors deep-seated hatred for the Bishop, perhaps for a personal betrayal."},
+        {"short": "Duty", "long": "Believes the Bishop's removal is necessary for the greater good or to fulfill an oath."},
+        {"short": "Curiosity", "long": "Driven by a need to uncover forbidden knowledge, regardless of the cost."},
+        {"short": "Ambivalence", "long": "Acts out of confusion or conflicting loyalties, unable to choose a side."},
+        {"short": "Pride", "long": "Wounded pride compels them to prove their worth, no matter the consequences."},
+        {"short": "Despair", "long": "Hopelessness has driven them to desperate measures."},
+        {"short": "Envy", "long": "Covets the Bishop's status, possessions, or relationships."}
+    ],
+    [
+        {"short": "Fanaticism", "long": "A zealot's fervor for the occult, convinced the Bishop stood in the way of a higher calling."},
+        {"short": "Blackmail", "long": "Manipulates others with secrets, but is also ensnared by their own."},
+        {"short": "Obsession", "long": "Cannot let go of a single idea, person, or artifact, regardless of the cost."},
+        {"short": "Jealousy", "long": "Burns with envy over the Bishop's favor or affections."},
+        {"short": "Ambition", "long": "Will stop at nothing to climb the social or ecclesiastical ladder."},
+        {"short": "Fear", "long": "Acts out of terror—of discovery, of punishment, or of the unknown."},
+        {"short": "Loyalty", "long": "Would do anything to protect a friend, mentor, or cause—even murder."},
+        {"short": "Shame", "long": "Desperate to keep a personal failing or scandal hidden."}
+    ],
+    [
+        {"short": "Manipulation", "long": "A master of schemes, always pulling strings from the shadows."},
+        {"short": "Forbidden Love", "long": "A love that could never be, driving them to reckless acts."},
+        {"short": "Desperation", "long": "Backed into a corner by circumstance, sees no other way out."},
+        {"short": "Zealotry", "long": "Religious or ideological extremism justifies any means."},
+        {"short": "Guilt", "long": "Haunted by a past mistake, tries to cover it up at all costs."},
+        {"short": "Resentment", "long": "Long-standing bitterness finally boils over."},
+        {"short": "Remorse", "long": "Tries to undo a terrible wrong, but only makes things worse."},
+        {"short": "Curiosity", "long": "An insatiable need to know the truth, no matter the danger."}
+    ],
+    [
+        {"short": "Ambition", "long": "Sees the Bishop's fall as a chance to seize power."},
+        {"short": "Obsession", "long": "Fixated on a single goal, person, or artifact."},
+        {"short": "Fear", "long": "Paralyzed by terror, acts rashly to protect themselves."},
+        {"short": "Loyalty", "long": "Would betray anyone else to protect their chosen ally."},
+        {"short": "Jealousy", "long": "Cannot stand to see the Bishop favored over them."},
+        {"short": "Blackmail", "long": "Uses secrets as weapons, but is also vulnerable to exposure."},
+        {"short": "Shame", "long": "Will do anything to keep their disgrace hidden."},
+        {"short": "Despair", "long": "Hopelessness leads to desperate, dangerous acts."}
+    ],
+    [
+        {"short": "Zealotry", "long": "Religious fervor blinds them to all but their cause."},
+        {"short": "Forbidden Love", "long": "A secret passion drives them to extremes."},
+        {"short": "Manipulation", "long": "Always plotting, always two steps ahead."},
+        {"short": "Guilt", "long": "Haunted by what they've done, or failed to do."},
+        {"short": "Resentment", "long": "Old wounds fester, fueling their actions."},
+        {"short": "Remorse", "long": "Desperate to make amends, but only digs deeper."},
+        {"short": "Ambition", "long": "Will stop at nothing to achieve their goals."},
+        {"short": "Curiosity", "long": "Their need to know is greater than their fear."}
+    ],
+    [
+        {"short": "Fanaticism", "long": "Believes the Bishop's death serves a higher, cosmic purpose."},
+        {"short": "Jealousy", "long": "Envy poisons their every thought."},
+        {"short": "Obsession", "long": "Cannot let go, even as it destroys them."},
+        {"short": "Desperation", "long": "Sees no other way out."},
+        {"short": "Blackmail", "long": "Trapped by secrets, lashes out to protect themselves."},
+        {"short": "Loyalty", "long": "Would sacrifice anything for their chosen person or cause."},
+        {"short": "Shame", "long": "Haunted by disgrace, will do anything to keep it hidden."},
+        {"short": "Ambition", "long": "Sees opportunity in the Bishop's absence."}
+    ]
+]
 
 # chosen_motive_pool = random.choice(motive_pools)
 # chosen_alibi_pool = random.choice(alibi_pools)
@@ -97,22 +193,30 @@ game_state["chapel_pray_cooldown"] = 0
 # game_state["score_log"].append("Turn taken [-1]")
 
 motive_descriptions = {
-    "Fanaticism": "Their eyes burn with a wild, unyielding light, as if they alone can see some hidden truth in the darkness. Their hands tremble with fervor, clutching at a pendant or prayer beads as if for protection—or power. You sense a mind teetering on the edge of devotion and madness.",
-    "Revenge": "A simmering anger lurks beneath their calm exterior, every word edged with old wounds and bitter memory. Their gaze flickers with resentment, and you sense they have not forgotten past slights. The air around them feels charged, as if violence is never far from their thoughts.",
-    "Jealousy": "Their smile is brittle, their eyes darting to others with a mixture of longing and spite. Every gesture seems calculated, as if measuring themselves against invisible rivals. You sense a heart gnawed by envy, desperate for recognition.",
-    "Forbidden Love": "A haunted tenderness lingers in their expression, shadowed by guilt and longing. They speak in half-truths, guarding secrets that ache to be confessed. You sense a soul torn between passion and peril.",
-    "Desperation": "Their movements are restless, their words tinged with anxiety and a hint of pleading. You see the weight of debts and failures pressing down on them, driving them to the edge. Every glance is a search for escape—or salvation.",
-    "Ambition": "They carry themselves with calculated poise, eyes always searching for advantage. Their words are smooth, but you sense a hunger for power lurking beneath the surface. Nothing, it seems, would stand in the way of their ascent.",
-    "Obsession": "Their gaze is distant, fixed on patterns only they can see. They mutter to themselves, piecing together mysteries that may not exist. You sense a mind consumed by a single, all-devouring purpose.",
-    "Fear": "They flinch at every sound, eyes wide and haunted. Their voice quivers, and sweat beads on their brow. You sense they are driven by terror—of secrets, of discovery, of something unseen.",
-    "Blackmail": "They are guarded, every word weighed and measured. Their eyes flicker with calculation, as if always considering what you know—and what you might reveal. You sense they hold secrets, and are held by them in turn.",
-    "Guilt": "Their shoulders sag beneath an invisible burden, and their eyes avoid yours. Words come slowly, as if each is a confession. You sense a soul haunted by past misdeeds.",
-    "Loyalty": "They speak with conviction, their loyalty to another evident in every word. Yet there is a tension, as if torn between duty and conscience. You sense they would do anything to protect those they care for.",
-    "Resentment": "Their tone is clipped, their answers curt. Old grievances simmer just beneath the surface, coloring every interaction. You sense a grudge that has festered for years.",
-    "Zealotry": "Their faith is absolute, their certainty unshakeable. They speak as if on a mission ordained by higher powers. You sense a dangerous righteousness, blind to doubt or mercy.",
-    "Shame": "They shrink from your gaze, cheeks flushed with embarrassment. Their words are evasive, and they seem desperate to hide some personal failing. You sense a secret that corrodes from within.",
-    "Manipulation": "A sly smile plays at their lips, and their eyes never quite meet yours. Every answer feels rehearsed, every gesture calculated. You sense a master of deception, always playing a deeper game."
+    "Fanaticism": "\"I have seen truths that would shatter lesser minds. My faith is a fire that cannot be quenched.\" The intensity in the suspect's eyes never wavers, and even silence feels charged.",
+    "Revenge": "\"Justice was denied to me for too long. I will not rest until the scales are balanced.\" Every word from the suspect is edged with old wounds and bitter memory.",
+    "Jealousy": "\"Why should the Bishop have everything? I have been overlooked for far too long.\" The suspect's posture is tense, as if measuring every gesture for hidden meaning.",
+    "Forbidden Love": "\"There are secrets between us that no one else could ever understand. I would do anything to protect what we shared.\" The air around the suspect feels heavy with longing and regret.",
+    "Desperation": "\"You cannot imagine what it is to be cornered by fate. I did what I had to do to survive.\" The suspect's voice trembles, and a restless energy clings to every movement.",
+    "Ambition": "\"Power is not given, it is taken. The Bishop was simply in my way.\" The suspect's gaze is sharp, always searching for advantage.",
+    "Obsession": "\"There is a pattern to all things, if you know where to look. I could not let go, even when I should have.\" The suspect seems distant, lost in thought even as you speak.",
+    "Fear": "\"There are things in this house that should never be spoken of. I acted out of terror, not malice.\" The suspect glances over their shoulder, haunted by unseen threats.",
+    "Blackmail": "\"Secrets are currency in this place. I have paid dearly for mine.\" The suspect's words are measured, and the air feels thick with unspoken threats.",
+    "Guilt": "\"I wish I could undo what has been done. The past is a weight I cannot put down.\" The suspect avoids your gaze, burdened by invisible sorrow.",
+    "Loyalty": "\"I would do anything for those I care about. Sometimes loyalty demands terrible choices.\" The suspect's conviction is unwavering, but a storm of conflict lingers beneath the surface.",
+    "Resentment": "\"The Bishop never saw my worth. Every slight, every insult, I remember them all.\" The suspect's tone is clipped, colored by bitterness.",
+    "Zealotry": "\"My cause is righteous, and I will not be swayed. The Bishop stood in the way of salvation.\" The suspect's certainty is unshakeable, and doubt finds no purchase.",
+    "Shame": "\"There are things I cannot speak of. My failures haunt me every day.\" The suspect shrinks from your gaze, desperate to hide some personal failing.",
+    "Manipulation": "\"Everyone here is a pawn, whether they know it or not. I simply play the game better.\" The suspect's smile never quite reaches their eyes, and every gesture feels rehearsed."
 }
+
+relationship_responses = [
+    "I had my reasons for being here, but the Bishop and I were not close.",
+    "The Bishop and I shared a cordial acquaintance, nothing more. Our paths crossed out of necessity, not friendship.",
+    "We had our disagreements, but I respected his position. Still, there were matters best left unspoken between us.",
+    "He was a distant figure in my life—always present, yet never truly known. I doubt he ever noticed me at all.",
+    "Our relationship was... complicated. There were secrets between us, and not all of them were mine to tell."
+]
 
 room_templates = {
     "Foyer": [
@@ -189,17 +293,278 @@ room_templates = {
     ],
     "Well House": [
         "The well is sealed with iron chains, their links cold and damp to the touch. Scratches climb the stone from inside, desperate and deep. A chill creeps up your spine, though no wind blows in this forgotten place."
-    ]
+    ],
+    "Music Room": [
+        "A grand piano dominates the room, its keys yellowed and silent. Sheet music is scattered across the floor, and a violin lies broken atop a velvet stool. Sometimes, you think you hear faint notes echoing in the silence."
+    ],
+    "Greenhouse": [
+        "Glass panes are fogged with condensation, and the air is thick with the scent of earth and decay. Exotic plants twist toward the ceiling, some with blossoms that seem to watch you as you pass."
+    ],
+    "Laundry Room": [
+        "The air is damp and heavy with the scent of soap and mildew. Baskets of linens are stacked in the corners, and a single shirt hangs, still wet, as if forgotten in haste."
+    ],
+    "Nursery": [
+        "Faded wallpaper peels from the walls, revealing childish drawings beneath. A rocking horse stands in the corner, and a doll stares blankly from a crib. The room is cold, and the silence is oppressive."
+    ],
+    "Billiards Room": [
+        "A green felt table sits beneath a dusty chandelier. Pool cues are scattered across the floor, and a single red ball rests in a pocket. The air smells faintly of cigars and old victories."
+    ],
+    "Wine Cellar": [
+        "Rows of dusty bottles line the walls, some shattered on the stone floor. The air is cool and tinged with the scent of spilled wine and mold. You hear the faint drip of water somewhere in the darkness."
+    ],
+    "Armory": [
+        "Racks of antique weapons and armor line the walls. Some pieces are missing, and a suit of armor stands in the corner, its visor lowered as if watching you."
+    ],
+    "Chapel Crypt": [
+        "Stone steps descend into darkness. The air is cold and damp, and the walls are lined with ancient tombs. Candles flicker in alcoves, casting long shadows that seem to move on their own."
+    ],
+    "Portrait Gallery": [
+        "A long, narrow hall filled with portraits of stern ancestors. Their eyes seem to follow you, and one painting hangs askew, revealing a dark gap in the wall behind it."
+    ],
+    "Map Room": [
+        "Maps of distant lands and star charts cover every surface. A globe sits in the corner, its surface marked with strange symbols. A journal lies open on the desk, its ink still wet."
+    ],
+    "Master Bathroom": [
+        "Marble tiles gleam in the candlelight. The tub is filled with cold, stagnant water, and a cracked mirror reflects your uneasy face. The scent of lavender barely masks something fouler."
+    ],
+    "Guest Suite": [
+        "The bed is perfectly made, and a suitcase sits unopened at its foot. A letter lies on the nightstand, its contents hastily scrawled and unfinished."
+    ],
+    "Tower Room": [
+        "A spiral staircase leads to a small chamber with windows on all sides. The wind howls through broken panes, and the view of the grounds is both beautiful and unsettling."
+    ],
+    "Vault": [
+        "A heavy iron door guards this room. Inside, shelves are lined with ledgers and locked boxes. Dust motes swirl in the beam of your lantern, and the air is thick with secrets."
+    ],
+    "Secret Laboratory": [
+        "Hidden behind a false wall, this room is filled with strange apparatus and bubbling vials. The scent of chemicals is overpowering, and notes in a spidery hand cover the desk."
+    ],
+    "Coach House": [
+        "Old carriages and tack hang from the rafters. The floor is covered in straw, and the scent of horses lingers. A lantern swings gently from a hook, though there is no breeze."
+    ],
+    "Gamekeeper’s Lodge": [
+        "A rustic room with hunting trophies on the walls. A rifle leans against the hearth, and muddy boots are lined up by the door. The air is thick with the scent of tobacco and wet dog."
+    ],
+    "Servant's Quarters": [
+        "Simple bunks line the walls, each with a small trunk at its foot. The air is filled with the scent of soap and sweat, and a half-finished letter lies on one of the pillows."
+    ],
+    "Clock Tower": [
+        "Gears and cogs fill the cramped space, ticking and grinding in the gloom. The great bell looms overhead, and the floor is littered with tools and oily rags. The view from the narrow window is dizzying."
+    ],
 }
 
+# --- Suspects and Motives ---
 suspect_templates = [
-    {"name": "Miss Vexley", "trait": "Nervous", "alibi": "Claims she was in the chapel praying.", "motive": "Jealousy"},
-    {"name": "Dr. Lorn", "trait": "Stoic", "alibi": "Was tending the fire in the lounge.", "motive": "Revenge"},
-    {"name": "Ulric", "trait": "Fanatical", "alibi": "Says he heard voices in the cellar.", "motive": "Fanaticism"},
-    {"name": "Colonel Catsup", "trait": "Charming", "alibi": "Claims he was entertaining guests all night.", "motive": "Desperation"},
-    {"name": "Lady Ashcroft", "trait": "Secretive", "alibi": "Insists she was alone in the solarium, reading.", "motive": "Forbidden Love"},
-    {"name": "Mr. Blackwood", "trait": "Cynical", "alibi": "Claims he was repairing a broken window in the attic.", "motive": "Ambition"}
+    {"name": "Miss Vexley", "trait": "Nervous", "alibi": "Claims she was in the chapel praying.", "motive": "Jealousy", "gender": "Female"},
+    {"name": "Dr. Lorn", "trait": "Stoic", "alibi": "Was tending the fire in the lounge.", "motive": "Revenge", "gender": "Male"},
+    {"name": "Ulric", "trait": "Fanatical", "alibi": "Says he heard voices in the cellar.", "motive": "Fanaticism", "gender": "Male"},
+    {"name": "Colonel Catsup", "trait": "Charming", "alibi": "Claims he was entertaining guests all night.", "motive": "Desperation", "gender": "Male"},
+    {"name": "Lady Ashcroft", "trait": "Secretive", "alibi": "Insists she was alone in the solarium, reading.", "motive": "Forbidden Love", "gender": "Female"},
+    {"name": "Mr. Blackwood", "trait": "Cynical", "alibi": "Claims he was repairing a broken window in the attic.", "motive": "Ambition", "gender": "Male"},
+    {"name": "Sister Mirabel", "trait": "Pious", "alibi": "Was lighting candles in the chapel crypt at midnight.", "motive": "Zealotry", "gender": "Female"},
+    {"name": "Mr. Feynman", "trait": "Scheming", "alibi": "Was reviewing maps in the map room at 11pm.", "motive": "Manipulation", "gender": "Male"},
+    {"name": "Mrs. Dalloway", "trait": "Anxious", "alibi": "Was sorting laundry in the laundry room at 9pm.", "motive": "Guilt", "gender": "Female"},
+    {"name": "Father Mallory", "trait": "Stern", "alibi": "Was polishing armor in the armory at 10pm.", "motive": "Duty", "gender": "Male"},
+    {"name": "Miss Penrose", "trait": "Curious", "alibi": "Was examining old maps in the study at 10pm.", "motive": "Curiosity", "gender": "Female"},
+    {"name": "Mr. Quill", "trait": "Secretive", "alibi": "Was reading letters in the servant's quarters at 11pm.", "motive": "Blackmail", "gender": "Male"},
+
 ]
+
+motive_flavor_texts = {
+    "Fanaticism": {
+        "Male": [
+            "\"You do not understand the power that moves through these halls. I am chosen for something greater.\" \"Faith is my shield and my weapon. I will not falter.\" The fervor in the voice is unmistakable, and the room seems to grow colder."
+        ],
+        "Female": [
+            "\"I have devoted my life to the truth, no matter the cost. Doubt is a luxury I cannot afford.\" \"The Bishop was an obstacle to enlightenment. I did what was necessary.\" The words tumble out in a rush, each one a desperate plea."
+        ]
+    },
+    "Revenge": {
+        "Male": [
+            "\"You think justice is a luxury? For me, it is a necessity. I have waited too long.\" \"Every slight, every betrayal—I remember them all. The Bishop was no exception.\" The jaw clenches, and old anger flickers in the gaze."
+        ],
+        "Female": [
+            "\"I have been wronged, and I will not forgive. The Bishop knew what was coming.\" \"Retribution is my right. I will see it done.\" The eyes never quite meet yours, as if afraid of what might spill out."
+        ]
+    },
+    "Jealousy": {
+        "Male": [
+            "\"Why should the Bishop have everything? I have been overlooked for far too long.\" \"No one ever notices my efforts, but I see what others have.\" The posture is tense, measuring every gesture for hidden meaning."
+        ],
+        "Female": [
+            "\"She always had more than me. I watched, I waited, but it was never enough.\" \"I would rather see it all burn than be left behind.\" The smile is brittle, and the air feels charged with rivalry."
+        ]
+    },
+    "Forbidden Love": {
+        "Male": [
+            "\"There are secrets between us that no one else could ever understand. I would do anything to protect what we shared.\" \"Love is a dangerous thing in this house.\" The air feels heavy with longing and regret."
+        ],
+        "Female": [
+            "\"We were never meant to be, but I could not let go.\" \"I would risk everything for a single moment more.\" The silence between sentences is thick with meaning."
+        ]
+    },
+    "Desperation": {
+        "Male": [
+            "\"You cannot imagine what it is to be cornered by fate. I did what I had to do to survive.\" \"There was no other way out.\" The voice trembles, and a restless energy clings to every movement."
+        ],
+        "Female": [
+            "\"I was drowning, and no one reached out to help.\" \"Desperation makes monsters of us all.\" The hands fidget constantly, betraying the strain."
+        ]
+    },
+    "Ambition": {
+        "Male": [
+            "\"Power is not given, it is taken. The Bishop was simply in my way.\" \"I will not apologize for wanting more.\" The gaze is sharp, always searching for advantage."
+        ],
+        "Female": [
+            "\"I have goals, and nothing will stand in my path.\" \"Ambition is not a sin, but a necessity.\" Every word is chosen with care, each gesture a step toward a goal."
+        ]
+    },
+    "Obsession": {
+        "Male": [
+            "\"There is a pattern to all things, if you know where to look. I could not let go, even when I should have.\" \"The truth is always just out of reach.\" The suspect seems distant, lost in thought even as you speak."
+        ],
+        "Female": [
+            "\"I see connections others miss. I cannot rest until I understand.\" \"Obsession is a curse, but I cannot escape it.\" The fingers trace invisible lines in the air, thoughts clearly elsewhere."
+        ]
+    },
+    "Fear": {
+        "Male": [
+            "\"There are things in this house that should never be spoken of. I acted out of terror, not malice.\" \"I am not proud of what I did.\" The suspect glances over their shoulder, haunted by unseen threats."
+        ],
+        "Female": [
+            "\"I was afraid, and fear makes us do terrible things.\" \"I wish I could forget what I saw.\" The words are barely above a whisper, and the air is thick with dread."
+        ]
+    },
+    "Blackmail": {
+        "Male": [
+            "\"Secrets are currency in this place. I have paid dearly for mine.\" \"You would do the same if you were in my position.\" The words are measured, and the air feels thick with unspoken threats."
+        ],
+        "Female": [
+            "\"Everyone here has something to hide. I am no different.\" \"Blackmail is a game, and I play to win.\" The laughter is forced, and the smile never quite reaches the eyes."
+        ]
+    },
+    "Guilt": {
+        "Male": [
+            "\"I wish I could undo what has been done. The past is a weight I cannot put down.\" \"Regret is my only companion.\" The gaze avoids yours, burdened by invisible sorrow."
+        ],
+        "Female": [
+            "\"I am haunted by what I did. I cannot escape it.\" \"Guilt is a shadow that follows me everywhere.\" The voice trembles, and the hands fidget with unease."
+        ]
+    },
+    "Loyalty": {
+        "Male": [
+            "\"I would do anything for those I care about. Sometimes loyalty demands terrible choices.\" \"My actions were not for myself.\" The conviction is unwavering, but a storm of conflict lingers beneath the surface."
+        ],
+        "Female": [
+            "\"I protect those I love, no matter the cost.\" \"Loyalty is my guiding star.\" The words are steady, but the eyes flicker with doubt."
+        ]
+    },
+    "Resentment": {
+        "Male": [
+            "\"The Bishop never saw my worth. Every slight, every insult, I remember them all.\" \"Resentment is a poison, and I have drunk deeply.\" The tone is clipped, colored by bitterness."
+        ],
+        "Female": [
+            "\"She never gave me a chance. I will not forgive.\" \"Old wounds do not heal in this house.\" The arms cross defensively, and the words are laced with pain."
+        ]
+    },
+    "Zealotry": {
+        "Male": [
+            "\"My cause is righteous, and I will not be swayed. The Bishop stood in the way of salvation.\" \"I did what was necessary for the greater good.\" The certainty is unshakeable, and doubt finds no purchase."
+        ],
+        "Female": [
+            "\"Faith is everything to me. I would walk into the abyss for my beliefs.\" \"The Bishop was a test, and I did not fail.\" The words burn with conviction, and the air grows heavy."
+        ]
+    },
+    "Shame": {
+        "Male": [
+            "\"There are things I cannot speak of. My failures haunt me every day.\" \"I wish I could disappear.\" The suspect shrinks from your gaze, desperate to hide some personal failing."
+        ],
+        "Female": [
+            "\"I am not proud of what I have done.\" \"Shame is a burden I carry alone.\" The voice is barely more than a whisper, and the cheeks flush with embarrassment."
+        ]
+    },
+    "Manipulation": {
+        "Male": [
+            "\"Everyone here is a pawn, whether they know it or not. I simply play the game better.\" \"You should be careful whom you trust.\" The smile never quite reaches the eyes, and every gesture feels rehearsed."
+        ],
+        "Female": [
+            "\"I see the strings others miss. I pull them when I must.\" \"Manipulation is an art, and I am its master.\" The laughter is light, but the gaze is sharp, watching for every weakness."
+        ]
+    },
+    "Greed": {
+        "Male": [
+            "\"Wealth is power, and I intend to claim what is owed to me.\" \"The Bishop's fortune was always just out of reach.\" The eyes linger on every object of value, fingers twitching with the urge to possess."
+        ],
+        "Female": [
+            "\"Riches open doors that faith never could.\" \"I have always wanted more than my share.\" The eyes sparkle at the mention of gold, ambition for more always apparent."
+        ]
+    },
+    "Remorse": {
+        "Male": [
+            "\"I wish I could take it all back. Regret is a chain I cannot break.\" \"The past haunts me, and I am desperate to make amends.\" The voice is tinged with sorrow, and the gaze is clouded with regret."
+        ],
+        "Female": [
+            "\"I am haunted by what I have done. I would do anything to set things right.\" \"Remorse is my constant companion.\" The eyes glisten with unshed tears, and the words tremble with regret."
+        ]
+    },
+    "Hatred": {
+        "Male": [
+            "\"The Bishop deserved everything that happened. My anger burns hotter than any fire.\" \"I will never forgive, never forget.\" The jaw clenches at the mention of certain names, and the words drip with venom."
+        ],
+        "Female": [
+            "\"I despise everything about her. Hatred is all I have left.\" \"She brought this on herself.\" The tone is icy, and the words are sharp as daggers."
+        ]
+    },
+    "Duty": {
+        "Male": [
+            "\"I did what was required of me. Duty is not a choice, but a burden.\" \"Honor demanded action, no matter the cost.\" The posture is rigid, every word weighed with obligation."
+        ],
+        "Female": [
+            "\"My responsibilities come before all else. I could not turn away.\" \"Duty is my shield, and my prison.\" The answers are precise, the demeanor formal."
+        ]
+    },
+    "Curiosity": {
+        "Male": [
+            "\"There are secrets in this manor that beg to be uncovered.\" \"I could not resist the urge to know more.\" The eyes dart around the room, hungry for new information."
+        ],
+        "Female": [
+            "\"Mysteries draw me in, even when I know I should walk away.\" \"Curiosity is my guiding star.\" The gaze is sharp and inquisitive, every question asked with intent."
+        ]
+    },
+    "Ambivalence": {
+        "Male": [
+            "\"I am torn between what is right and what is necessary.\" \"My loyalties shift with the wind.\" The words are hesitant, and the thoughts clearly divided."
+        ],
+        "Female": [
+            "\"I do not know what I truly want. My heart is divided.\" \"Ambivalence clouds every decision.\" The responses waver, torn between conflicting loyalties."
+        ]
+    },
+    "Pride": {
+        "Male": [
+            "\"I am not one to be underestimated. Pride is my armor.\" \"I will not accept blame for what happened.\" The head is held high, confidence bordering on arrogance."
+        ],
+        "Female": [
+            "\"I have earned my place here. Pride is my crown.\" \"Criticism rolls off me like rain.\" The self-assurance is unshakable, and the gaze dares you to challenge."
+        ]
+    },
+    "Despair": {
+        "Male": [
+            "\"Hope abandoned me long ago. I see no way out.\" \"Despair is a weight I carry every day.\" The shoulders slump, and the words are heavy with resignation."
+        ],
+        "Female": [
+            "\"I am lost in a fog of hopelessness. Nothing matters anymore.\" \"Despair is my only companion.\" The voice is flat, and the spirit weighed down by sorrow."
+        ]
+    },
+    "Envy": {
+        "Male": [
+            "\"I watched others succeed while I was left behind.\" \"Envy poisons everything I touch.\" The gaze is covetous, and the words are colored by resentment."
+        ],
+        "Female": [
+            "\"I compare myself to others constantly. I want what I cannot have.\" \"Envy is a hunger that never fades.\" The sigh is wistful, and every gesture betrays longing."
+        ]
+    }
+}
+
 
 # def generate_walls():
 #     wall_chance = 0.18  # 18% chance for a wall between any two adjacent rooms
@@ -215,7 +580,6 @@ suspect_templates = [
 
 import sys
 import time
-import msvcrt
 
 for suspect in game_state["suspects"]:
     # Find the correct long description from motive_pools
@@ -232,6 +596,14 @@ for suspect in game_state["suspects"]:
     if not found:
         suspect["motive_long"] = motive_descriptions.get(suspect["motive"], "No details.")
 
+def get_pronoun(suspect, case="subject"):
+    # case: "subject" -> he/she, "object" -> him/her, "possessive" -> his/her
+    gender = suspect.get("gender", "Male")
+    if gender == "Female":
+        return {"subject": "she", "object": "her", "possessive": "her"}[case]
+    else:
+        return {"subject": "he", "object": "him", "possessive": "his"}[case]
+    
 def timing_bullseye_chase(rounds=3, escape_distance=3):
     print("A chase begins! Press SPACE when the red circle (●) is in the bullseye (◎)!")
     positions = list(range(1, 22))  # 1 to 21
@@ -266,7 +638,7 @@ def timing_bullseye_chase(rounds=3, escape_distance=3):
             if msvcrt.kbhit():
                 key = msvcrt.getch()
                 if key == b' ':
-                    if abs(pos - center) <= 1:
+                    if abs(pos - center) <= 1:  # Forgiving: allow hit if within 1 of center
                         hit = True
                         break
                     else:
@@ -283,7 +655,12 @@ def timing_bullseye_chase(rounds=3, escape_distance=3):
             wait_for_space("Press SPACE to continue.")
             return True
         elif distance <= 0:
-            print(RED + "The monster catches you and rips out your heart, devouring it before your dying eyes." + RESET)
+            if "Abraxas Amulet" in game_state["inventory"]:
+                print(f"{ORANGE}As the monstrosity lunges, the Abraxas Amulet blazes with power! A wave of force banishes the horror in a flash of golden light. You are saved!{RESET}")
+                wait_for_space("Press SPACE to continue.")
+                return True  # Player escapes
+            else:
+                print(RED + "The monster catches you and rips out your heart, devouring it before your dying eyes." + RESET)
             print(RED + r"""
 __     __           _____  _          _ 
  \ \   / /          |  __ \(_)        | |
@@ -300,7 +677,6 @@ __     __           _____  _          _
             return False
 
 def wait_for_space(prompt="Press SPACE to continue."):
-    import msvcrt
     print(prompt)
     while True:
         key = msvcrt.getch()
@@ -309,7 +685,6 @@ def wait_for_space(prompt="Press SPACE to continue."):
 
 def get_direction_from_arrow():
     """Wait for an arrow key and return 'n', 's', 'e', or 'w', or None if not an arrow."""
-    import msvcrt
     first = msvcrt.getch()
     if first == b'\xe0':  # Arrow key prefix
         second = msvcrt.getch()
@@ -421,95 +796,283 @@ def place_special_rooms():
     game_state["rooms"][chapel_pos] = {"type": "Chapel", "visited": False}
 
 def generate_passages():
-    """Generate a procedural map where each room has at most 4 exits, and all passages are consistent."""
-    passages = {}
+    """
+    Generate a maze with long corridors using a direction bias.
+    Fills game_state['passages'] with a dict of {pos: set(directions)}.
+    """
+    width = MAP_MAX - MAP_MIN + 1
+    height = MAP_MAX - MAP_MIN + 1
+    grid = {}
     for x in range(MAP_MIN, MAP_MAX + 1):
         for y in range(MAP_MIN, MAP_MAX + 1):
-            pos = (x, y)
-            possible_dirs = []
-            for dir_name, (dx, dy) in DIRECTIONS.items():
-                nx, ny = x + dx, y + dy
-                if MAP_MIN <= nx <= MAP_MAX and MAP_MIN <= ny <= MAP_MAX:
-                    possible_dirs.append(dir_name)
-            # Limit to 4 random directions per room
-            num_exits = min(len(possible_dirs), random.randint(2, 3))
-            if num_exits > 0:
-                exits = random.sample(possible_dirs, num_exits)
-            else:
-                exits = []
-            passages[pos] = set(exits)
+            grid[(x, y)] = set()
 
-    # Make passages consistent (if A->B, then B->A), but do not exceed 4 exits per room
-    for (x, y), dirs in passages.items():
-        for dir_name in list(dirs):
-            dx, dy = DIRECTIONS[dir_name]
+    start = (0, 0)
+    visited = set([start])
+    stack = [(start, None)]  # (position, previous_direction)
+    while stack:
+        (x, y), prev_dir = stack[-1]
+        unvisited_neighbors = []
+        for dir_name, (dx, dy) in DIRECTIONS.items():
             nx, ny = x + dx, y + dy
-            rev_dir = None
-            for d, (ddx, ddy) in DIRECTIONS.items():
-                if (ddx, ddy) == (-dx, -dy):
-                    rev_dir = d
+            neighbor = (nx, ny)
+            if MAP_MIN <= nx <= MAP_MAX and MAP_MIN <= ny <= MAP_MAX and neighbor not in visited:
+                unvisited_neighbors.append((dir_name, neighbor))
+        if unvisited_neighbors:
+            # Bias: 70% chance to continue in the same direction if possible
+            if prev_dir and any(d == prev_dir for d, _ in unvisited_neighbors) and random.random() < 0.7:
+                dir_name, neighbor = next((d, n) for d, n in unvisited_neighbors if d == prev_dir)
+            else:
+                dir_name, neighbor = random.choice(unvisited_neighbors)
+            # Carve passage
+            grid[(x, y)].add(dir_name)
+            # Add reverse direction for neighbor
+            for rev_dir, (dx, dy) in DIRECTIONS.items():
+                if (x, y) == (neighbor[0] + dx, neighbor[1] + dy):
+                    grid[neighbor].add(rev_dir)
                     break
-            # Only add reverse direction if it doesn't exceed 4 exits
-            if rev_dir:
-                neighbor_exits = passages.setdefault((nx, ny), set())
-                if len(neighbor_exits) < 4:
-                    neighbor_exits.add(rev_dir)
-                else:
-                    # If neighbor already has 4 exits, remove this exit from the original room to maintain consistency
-                    passages[(x, y)].discard(dir_name)
-    game_state["passages"] = passages
+            visited.add(neighbor)
+            stack.append((neighbor, dir_name))
+        else:
+            stack.pop()
+
+    game_state["passages"] = grid
 
 def auto_generate_walls_and_doors():
-    # Clear any existing walls/doors
+    """
+    After maze generation, explicitly add a wall or door for every non-passage between adjacent rooms.
+    Then, add extra random walls/doors to ensure at least 20 total barriers.
+    """
     game_state["walls"] = set()
     game_state["locked_doors"] = set()
+    foyer_pos = (0, 0)
+    door_ratio = 0.2  # 20% of barriers are doors, 80% are walls
+    min_barriers = 60  # Minimum total number of walls + doors
+
+    # First, add walls/doors for all non-passages
     for (x, y), exits in game_state["passages"].items():
         for dir_name, (dx, dy) in DIRECTIONS.items():
             nx, ny = x + dx, y + dy
             neighbor = (nx, ny)
-            # Only check cardinal directions for walls/doors
             if dir_name in {"n", "s", "e", "w"} and MAP_MIN <= nx <= MAP_MAX and MAP_MIN <= ny <= MAP_MAX:
-                # If there is NO passage in this direction, add a wall
                 if dir_name not in exits:
-                    # Example: you could randomly make some of these locked doors
-                    if random.random() < 0.15:
+                    if random.random() < door_ratio:
                         game_state["locked_doors"].add(((x, y), neighbor))
                         game_state["locked_doors"].add((neighbor, (x, y)))
                     else:
                         game_state["walls"].add(((x, y), neighbor))
                         game_state["walls"].add((neighbor, (x, y)))
 
+    # Surround the grid with walls except for the foyer exit
+    for x in range(MAP_MIN, MAP_MAX + 1):
+        for y in range(MAP_MIN, MAP_MAX + 1):
+            pos = (x, y)
+            # North edge
+            if y == MAP_MIN:
+                if pos != foyer_pos or "n" not in game_state["passages"].get(foyer_pos, set()):
+                    game_state["walls"].add(((x, y), (x, y - 1)))
+                    game_state["walls"].add(((x, y - 1), (x, y)))
+            # South edge
+            if y == MAP_MAX:
+                game_state["walls"].add(((x, y), (x, y + 1)))
+                game_state["walls"].add(((x, y + 1), (x, y)))
+            # West edge
+            if x == MAP_MIN:
+                game_state["walls"].add(((x, y), (x - 1, y)))
+                game_state["walls"].add(((x - 1, y), (x, y)))
+            # East edge
+            if x == MAP_MAX:
+                game_state["walls"].add(((x, y), (x + 1, y)))
+                game_state["walls"].add(((x + 1, y), (x, y)))
+
+    # --- Add extra random walls/doors to reach at least min_barriers ---
+    all_possible = []
+    for (x, y) in game_state["passages"]:
+        for dir_name, (dx, dy) in DIRECTIONS.items():
+            nx, ny = x + dx, y + dy
+            neighbor = (nx, ny)
+            if (
+                dir_name in {"n", "s", "e", "w"}
+                and MAP_MIN <= nx <= MAP_MAX and MAP_MIN <= ny <= MAP_MAX
+                and ((x, y), neighbor) not in game_state["walls"]
+                and ((x, y), neighbor) not in game_state["locked_doors"]
+                and dir_name not in game_state["passages"][(x, y)]
+            ):
+                # Only add each pair once
+                if ((x, y), neighbor) < ((neighbor, (x, y))):
+                    all_possible.append(((x, y), neighbor))
+
+    current_barriers = len(game_state["walls"]) // 2 + len(game_state["locked_doors"]) // 2
+    target_barriers = max(current_barriers * 2, min_barriers)
+
+    random.shuffle(all_possible)
+    i = 0
+    while current_barriers < target_barriers and i < len(all_possible):
+        pair = all_possible[i]
+        if random.random() < door_ratio:
+            game_state["locked_doors"].add(pair)
+            game_state["locked_doors"].add((pair[1], pair[0]))
+        else:
+            game_state["walls"].add(pair)
+            game_state["walls"].add((pair[1], pair[0]))
+        current_barriers += 1
+        i += 1
+
 # Call this function at the start of a new game/case, before initializing suspects and clues:
 
+def seal_region_with_locked_door(region_a, region_b):
+    """
+    Seal off region_b from region_a with a locked door, ensuring no other passages connect them.
+    region_a and region_b are lists of positions (tuples).
+    """
+    # Find all adjacent pairs between regions
+    for pos_a in region_a:
+        for pos_b in region_b:
+            if abs(pos_a[0] - pos_b[0]) + abs(pos_a[1] - pos_a[1]) == 1:
+                # Remove all passages between region_a and region_b
+                for dir_name, (dx, dy) in DIRECTIONS.items():
+                    if (pos_a[0] + dx, pos_a[1] + dy) == pos_b:
+                        game_state["passages"][pos_a].discard(dir_name)
+                    if (pos_b[0] + dx, pos_b[1] + dy) == pos_a:
+                        game_state["passages"][pos_b].discard(dir_name)
+                # Add locked door both ways
+                game_state["locked_doors"].add((pos_a, pos_b))
+                game_state["locked_doors"].add((pos_b, pos_a))
+    # Remove any other passages between region_a and region_b (not just direct neighbors)
+    for pos_a in region_a:
+        for pos_b in region_b:
+            for dir_name, (dx, dy) in DIRECTIONS.items():
+                if (pos_a[0] + dx, pos_a[1] + dy) == pos_b or (pos_b[0] + dx, pos_b[1] + dy) == pos_a:
+                    continue  # Already handled above
+                # Remove indirect passages
+                game_state["passages"][pos_a].discard(dir_name)
+                game_state["passages"][pos_b].discard(dir_name)
+            
+def seal_random_region_with_locked_door():
+    # Get all room positions (excluding Foyer)
+    all_positions = [pos for pos, room in game_state["visited_locations"].items() if room != "Foyer"]
+    if len(all_positions) < 2:
+        print("Not enough rooms to seal a region.")
+        return
+
+    # Pick two random positions to serve as the "bridge" for the locked door
+    pos_a, pos_b = random.sample(all_positions, 2)
+
+    # Find all positions connected to pos_b (the sealed region) via passages
+    sealed_region = set()
+    queue = [pos_b]
+    visited = set([pos_a])  # Don't include pos_a's region
+    while queue:
+        current = queue.pop()
+        sealed_region.add(current)
+        for dir_name in game_state["passages"].get(current, []):
+            dx, dy = DIRECTIONS[dir_name]
+            neighbor = (current[0] + dx, current[1] + dy)
+            if neighbor not in visited and neighbor not in sealed_region:
+                queue.append(neighbor)
+                visited.add(neighbor)
+
+    # Remove all passages between pos_a and pos_b, add a locked door
+    for dir_name, (dx, dy) in DIRECTIONS.items():
+        if (pos_a[0] + dx, pos_a[1] + dy) == pos_b:
+            game_state["passages"][pos_a].discard(dir_name)
+        if (pos_b[0] + dx, pos_b[1] + dy) == pos_a:
+            game_state["passages"][pos_b].discard(dir_name)
+    game_state["locked_doors"].add((pos_a, pos_b))
+    game_state["locked_doors"].add((pos_b, pos_a))
+
+    # Place a clue or artifact in the sealed region (pos_b)
+    room_b = game_state["visited_locations"][pos_b]
+    possible_clues = [c for c in game_state.get("clue_pool", []) if c not in game_state.get("clues", [])]
+    possible_artifacts = [a for a in artifact_pool if a["name"] != "Silver Ornate Key" and a["name"] not in [v["name"] for v in game_state.get("artifact_locations", {}).values()]]
+    if possible_clues and random.random() < 0.5:
+        clue_locations[room_b] = random.choice(possible_clues)
+    elif possible_artifacts:
+        game_state.setdefault("artifact_locations", {})[room_b] = random.choice(possible_artifacts)
+
+    # Place the Silver Ornate Key in a random room NOT in the sealed region
+    outside_positions = [pos for pos in all_positions if pos not in sealed_region and pos != pos_a]
+    if outside_positions:
+        key_pos = random.choice(outside_positions)
+        key_room = game_state["visited_locations"][key_pos]
+        game_state.setdefault("artifact_locations", {})[key_room] = next(a for a in artifact_pool if a["name"] == "Silver Ornate Key")
+        print(f"Silver Ornate Key placed in {key_room}.")
+    else:
+        print("No valid position found for Silver Ornate Key (all rooms are sealed or unavailable).")
+
+    # Debug output
+    print(f"Locked door placed between {game_state['visited_locations'][pos_a]} and {game_state['visited_locations'][pos_b]}.")
+    print(f"Clue/artifact placed in {room_b}.")
+
+# Call this after auto_generate_walls_and_doors() in character_creation():
+# seal_random_region_with_locked_door()
+
 def initialize_suspects():
-    game_state["suspects"] = random.sample(suspect_templates, 4)
+    # Set number of suspects based on difficulty
+    num_suspects = 4 if game_state.get("difficulty") == "easy" else 8
+
+    # The culprit and other_suspects should already be set up by associate_culprit_and_pools()
+    # game_state["suspects"] = [culprit] + other_suspects
+
     player_pos = (0, 0)
-    MAP_MIN = -8
-    MAP_MAX = 7
     # Generate possible positions within 2-4 tiles of player and inside bounds
     possible_positions = []
-    
     for dx in range(-4, 5):
         for dy in range(-4, 5):
             dist = abs(dx) + abs(dy)
             pos = (player_pos[0] + dx, player_pos[1] + dy)
             if 2 <= dist <= 4 and MAP_MIN <= pos[0] <= MAP_MAX and MAP_MIN <= pos[1] <= MAP_MAX and pos != player_pos:
                 possible_positions.append(pos)
-    chosen_positions = random.sample(possible_positions, 4)
+    chosen_positions = random.sample(possible_positions, num_suspects)
     for suspect, pos in zip(game_state["suspects"], chosen_positions):
         suspect["position"] = pos
         suspect["wait_turns"] = 0
         # Assign random stats for combat
-        suspect["strength"] = random.randint(10,16)
-        suspect["stamina"] = random.randint(10,16)
-        suspect["agility"] = random.randint(9,15)
-        suspect["tolerance"] = 5  # or another starting value
-    # --- Assign murderer at random ---
-    murderer = random.choice(game_state["suspects"])
-    for suspect in game_state["suspects"]:
-        suspect["is_murderer"] = (suspect is murderer)
-    game_state["murderer"] = murderer["name"]
+        suspect["strength"] = random.randint(10, 16)
+        suspect["stamina"] = random.randint(10, 16)
+        suspect["agility"] = random.randint(9, 15)
+        suspect["tolerance"] = game_state.get("suspect_tolerance", 5)
 
+    # --- Assign murderer at random if not already set ---
+    if not any(s.get("is_murderer") for s in game_state["suspects"]):
+        murderer = random.choice(game_state["suspects"])
+        for suspect in game_state["suspects"]:
+            suspect["is_murderer"] = (suspect is murderer)
+        game_state["murderer"] = murderer["name"]
+
+    # Assign random, gendered, motive-matching flavor text
+    for suspect in game_state["suspects"]:
+        motive = suspect.get("motive")
+        gender = suspect.get("gender", "Male")
+        options = motive_flavor_texts.get(motive, {}).get(gender, [])
+        if options:
+            suspect["flavor_text"] = random.choice(options)
+        else:
+            suspect["flavor_text"] = motive_descriptions.get(motive, "They seem difficult to read.")
+        suspect["flavor_text_shown"] = False  # Track if long flavor text has been shown
+
+    # --- Assign new interrogation fields to each suspect ---
+    for i, suspect in enumerate(game_state["suspects"]):
+        suspect["means"] = means_pool[i % len(means_pool)]
+        suspect["knowledge"] = knowledge_pool[i % len(knowledge_pool)]
+        suspect["witnesses"] = witnesses_pool[i % len(witnesses_pool)]
+        suspect["financial"] = financial_pool[i % len(financial_pool)]
+        suspect["secret_relationship"] = secret_relationship_pool[i % len(secret_relationship_pool)]
+        suspect["blackmail"] = blackmail_pool[i % len(blackmail_pool)]
+        suspect["confession"] = confession_pool[i % len(confession_pool)]
+        
+    # After assigning suspects, randomly pick 2-3 suspects to have "strong" opportunity, rest get "weak" or "uncertain"
+    # opportunity_levels = ["strong", "weak", "uncertain"]
+    num_strong = min(3, len(game_state["suspects"]))  # Up to 3 suspects per game
+
+    strong_indices = random.sample(range(len(game_state["suspects"])), num_strong)
+    for i, suspect in enumerate(game_state["suspects"]):
+        if i in strong_indices:
+            suspect["opportunity"] = "strong"
+        else:
+            suspect["opportunity"] = random.choice(["weak", "uncertain"])
+
+# Define motive flavor texts
 flavor_text_pool = [
     "A cold breeze blows by.",
     "You hear the baying of wolves in the distance.",
@@ -530,31 +1093,81 @@ clue_pools = [
         "A blood-stained prayer book.",
         "A silver pendant etched with tentacles.",
         "An empty ritual circle drawn in chalk.",
-        "A coded diary mentioning a 'Summoning'."
+        "A coded diary mentioning a 'Summoning'.",
+        "A torn hymnbook page with a cryptic note.",
+        "A broken locket containing a faded photograph.",
+        "A vial of strange blue liquid.",
+        "A chess piece carved from bone."
     ],
     [
         "A torn dance card.",
         "A wilted rose with a hidden note.",
         "A pawn ticket for a golden chalice, issued the day before the Bishop vanished.",
-        "A threatening note warning the Bishop to abandon his 'awakening.'"
+        "A threatening note warning the Bishop to abandon his 'awakening.'",
+        "A bloodied handkerchief embroidered with initials.",
+        "A letter confessing to a secret affair.",
+        "A diary entry mentioning a midnight visitor.",
+        "A set of muddy footprints leading to the attic."
     ],
     [
         "A candle stub melted into the shape of a screaming face.",
         "A cryptic telegram signed only with the letter 'V'.",
         "A bloodied scrap of choir robe hidden behind the altar.",
-        "A torn page from a bestiary describing 'The Watcher in the Fog.'"
+        "A torn page from a bestiary describing 'The Watcher in the Fog.'",
+        "A chess piece carved from bone.",
+        "A vial labeled 'Do Not Drink'.",
+        "A burnt scrap of parchment with arcane symbols.",
+        "A lock of hair tied with a red ribbon."
     ],
     [
         "A broken window latch.",
         "A missing library ledger.",
         "A muddy boot print.",
-        "A page torn from a forbidden tome."
+        "A page torn from a forbidden tome.",
+        "A shattered monocle near the cellar stairs.",
+        "A bloodstained glove found in the garden.",
+        "A torn map showing secret passages.",
+        "A scorched scrap of sermon notes."
     ],
     [
         "A star chart with strange markings.",
         "A bloodstained handkerchief.",
         "A monogrammed glove found in the garden.",
-        "A shattered monocle near the cellar stairs."
+        "A shattered monocle near the cellar stairs.",
+        "A faded photograph of the Bishop and an unknown figure.",
+        "A silver key engraved with runes.",
+        "A pressed flower stained with blood.",
+        "A page from a diary describing a hidden ritual."
+    ],
+    [
+        "A pawn ticket for a golden chalice.",
+        "A burnt letter addressed to the Bishop.",
+        "A torn page from a guestbook.",
+        "A vial of laudanum, nearly empty.",
+        "A bloodied handkerchief with a family crest.",
+        "A coded message hidden in a painting.",
+        "A scrap of fabric matching the Bishop's robe.",
+        "A broken rosary found in the crypt."
+    ],
+    [
+        "A diary entry about a forbidden meeting.",
+        "A pressed flower from the conservatory.",
+        "A torn invitation to a secret gathering.",
+        "A bloodstained page from a ledger.",
+        "A silver ring inscribed with strange symbols.",
+        "A burnt candle stub found in the attic.",
+        "A cryptic note referencing the 'Elder Ones'.",
+        "A page from a lost sermon."
+    ],
+    [
+        "A bloodied scrap of choir robe.",
+        "A torn letter from the Bishop addressed to Lady Ashcroft.",
+        "A pawn ticket for a golden chalice.",
+        "A threatening note warning the Bishop.",
+        "A coded diary mentioning a 'Summoning'.",
+        "A vial of strange blue liquid.",
+        "A chess piece carved from bone.",
+        "A lock of hair tied with a red ribbon."
     ]
 ]
 
@@ -563,31 +1176,81 @@ clue_motives_pools = [
         "A blood-stained prayer book.": "Fanaticism",
         "A silver pendant etched with tentacles.": "Fanaticism",
         "An empty ritual circle drawn in chalk.": "Fanaticism",
-        "A coded diary mentioning a 'Summoning'.": "Revenge"
+        "A coded diary mentioning a 'Summoning'.": "Revenge",
+        "A torn hymnbook page with a cryptic note.": "Jealousy",
+        "A broken locket containing a faded photograph.": "Forbidden Love",
+        "A vial of strange blue liquid.": "Desperation",
+        "A chess piece carved from bone.": "Obsession"
     },
     {
         "A torn dance card.": "Jealousy",
         "A wilted rose with a hidden note.": "Forbidden Love",
         "A pawn ticket for a golden chalice, issued the day before the Bishop vanished.": "Desperation",
-        "A threatening note warning the Bishop to abandon his 'awakening.'": "Fear"
-    },
-    {
-        "A broken window latch.": "Ambition",
-        "A missing library ledger.": "Blackmail",
-        "A muddy boot print.": "Desperation",
-        "A page torn from a forbidden tome.": "Blackmail"
-    },
-    {
-        "A star chart with strange markings.": "Obsession",
-        "A bloodstained handkerchief.": "Revenge",
-        "A monogrammed glove found in the garden.": "Jealousy",
-        "A shattered monocle near the cellar stairs.": "Ambition"
+        "A threatening note warning the Bishop to abandon his 'awakening.'": "Fear",
+        "A bloodied handkerchief embroidered with initials.": "Guilt",
+        "A letter confessing to a secret affair.": "Blackmail",
+        "A diary entry mentioning a midnight visitor.": "Loyalty",
+        "A set of muddy footprints leading to the attic.": "Ambition"
     },
     {
         "A candle stub melted into the shape of a screaming face.": "Obsession",
         "A cryptic telegram signed only with the letter 'V'.": "Blackmail",
         "A bloodied scrap of choir robe hidden behind the altar.": "Guilt",
-        "A torn page from a bestiary describing 'The Watcher in the Fog.'": "Fear"
+        "A torn page from a bestiary describing 'The Watcher in the Fog.'": "Fear",
+        "A chess piece carved from bone.": "Obsession",
+        "A vial labeled 'Do Not Drink'.": "Despair",
+        "A burnt scrap of parchment with arcane symbols.": "Curiosity",
+        "A lock of hair tied with a red ribbon.": "Forbidden Love"
+    },
+    {
+        "A broken window latch.": "Ambition",
+        "A missing library ledger.": "Blackmail",
+        "A muddy boot print.": "Desperation",
+        "A page torn from a forbidden tome.": "Blackmail",
+        "A shattered monocle near the cellar stairs.": "Ambition",
+        "A bloodstained glove found in the garden.": "Revenge",
+        "A torn map showing secret passages.": "Curiosity",
+        "A scorched scrap of sermon notes.": "Remorse"
+    },
+    {
+        "A star chart with strange markings.": "Obsession",
+        "A bloodstained handkerchief.": "Revenge",
+        "A monogrammed glove found in the garden.": "Jealousy",
+        "A shattered monocle near the cellar stairs.": "Ambition",
+        "A faded photograph of the Bishop and an unknown figure.": "Forbidden Love",
+        "A silver key engraved with runes.": "Curiosity",
+        "A pressed flower stained with blood.": "Remorse",
+        "A page from a diary describing a hidden ritual.": "Zealotry"
+    },
+    {
+        "A pawn ticket for a golden chalice.": "Greed",
+        "A burnt letter addressed to the Bishop.": "Resentment",
+        "A torn page from a guestbook.": "Duty",
+        "A vial of laudanum, nearly empty.": "Despair",
+        "A bloodied handkerchief with a family crest.": "Guilt",
+        "A coded message hidden in a painting.": "Manipulation",
+        "A scrap of fabric matching the Bishop's robe.": "Loyalty",
+        "A broken rosary found in the crypt.": "Zealotry"
+    },
+    {
+        "A diary entry about a forbidden meeting.": "Forbidden Love",
+        "A pressed flower from the conservatory.": "Remorse",
+        "A torn invitation to a secret gathering.": "Curiosity",
+        "A bloodstained page from a ledger.": "Blackmail",
+        "A silver ring inscribed with strange symbols.": "Obsession",
+        "A burnt candle stub found in the attic.": "Despair",
+        "A cryptic note referencing the 'Elder Ones'.": "Fanaticism",
+        "A page from a lost sermon.": "Zealotry"
+    },
+    {
+        "A bloodied scrap of choir robe.": "Guilt",
+        "A torn letter from the Bishop addressed to Lady Ashcroft.": "Forbidden Love",
+        "A pawn ticket for a golden chalice.": "Greed",
+        "A threatening note warning the Bishop.": "Fear",
+        "A coded diary mentioning a 'Summoning'.": "Revenge",
+        "A vial of strange blue liquid.": "Desperation",
+        "A chess piece carved from bone.": "Obsession",
+        "A lock of hair tied with a red ribbon.": "Jealousy"
     }
 ]
 
@@ -596,107 +1259,81 @@ alibi_pools = [
         {"text": "Praying in the Chapel at midnight.", "location": "Chapel", "time": "Midnight"},
         {"text": "Reading in the Library at 10pm.", "location": "Library", "time": "10pm"},
         {"text": "Tending the fire in the Parlor at 11pm.", "location": "Parlor", "time": "11pm"},
-        {"text": "Searching for a book in the Study at midnight.", "location": "Study", "time": "Midnight"}
+        {"text": "Searching for a book in the Study at midnight.", "location": "Study", "time": "Midnight"},
+        {"text": "Practicing music in the Music Room at 9pm.", "location": "Music Room", "time": "9pm"},
+        {"text": "Inspecting the Greenhouse at dusk.", "location": "Greenhouse", "time": "Dusk"},
+        {"text": "Repairing the clock in the Clock Tower at 11pm.", "location": "Clock Tower", "time": "11pm"},
+        {"text": "Feeding birds in the Garden at dawn.", "location": "Garden", "time": "Dawn"},
     ],
     [
         {"text": "Practicing dance steps in the Ballroom at 11pm.", "location": "Ballroom", "time": "11pm"},
         {"text": "Alone in the Solarium, reading at 10pm.", "location": "Solarium", "time": "10pm"},
         {"text": "Repairing a window in the Attic at midnight.", "location": "Attic", "time": "Midnight"},
-        {"text": "Inspecting the Cellar at midnight.", "location": "Cellar", "time": "Midnight"}
+        {"text": "Inspecting the Cellar at midnight.", "location": "Cellar", "time": "Midnight"},
+        {"text": "Polishing silver in the Butler’s Pantry at 8pm.", "location": "Butler’s Pantry", "time": "8pm"},
+        {"text": "Tuning the grand piano in the Music Room at 7pm.", "location": "Music Room", "time": "7pm"},
+        {"text": "Arranging flowers in the Conservatory at dusk.", "location": "Conservatory", "time": "Dusk"},
+        {"text": "Lighting candles in the Chapel Crypt at midnight.", "location": "Chapel Crypt", "time": "Midnight"},
     ],
     [
         {"text": "Walking in the Garden at 11pm.", "location": "Garden", "time": "11pm"},
         {"text": "Observing the stars in the Observatory at 10pm.", "location": "Observatory", "time": "10pm"},
         {"text": "Dining alone in the Dining Hall at 11pm.", "location": "Dining Hall", "time": "11pm"},
-        {"text": "Smoking in the Smoking Room at midnight.", "location": "Smoking Room", "time": "Midnight"}
+        {"text": "Smoking in the Smoking Room at midnight.", "location": "Smoking Room", "time": "Midnight"},
+        {"text": "Sorting laundry in the Laundry Room at 9pm.", "location": "Laundry Room", "time": "9pm"},
+        {"text": "Inspecting the Armory at 8pm.", "location": "Armory", "time": "8pm"},
+        {"text": "Admiring paintings in the Portrait Gallery at 10pm.", "location": "Portrait Gallery", "time": "10pm"},
+        {"text": "Reviewing maps in the Map Room at 11pm.", "location": "Map Room", "time": "11pm"},
     ],
     [
         {"text": "Feeding the horses in the Stable at 10pm.", "location": "Horse Stable", "time": "10pm"},
         {"text": "Fetching water from the Well House at 11pm.", "location": "Well House", "time": "11pm"},
         {"text": "Admiring paintings in the Gallery at 10pm.", "location": "Gallery", "time": "10pm"},
-        {"text": "Resting in the East Bedchamber at midnight.", "location": "East Bedchamber", "time": "Midnight"}
+        {"text": "Resting in the East Bedchamber at midnight.", "location": "East Bedchamber", "time": "Midnight"},
+        {"text": "Cleaning weapons in the Armory at 9pm.", "location": "Armory", "time": "9pm"},
+        {"text": "Tending plants in the Greenhouse at 8pm.", "location": "Greenhouse", "time": "8pm"},
+        {"text": "Writing letters in the Study at 9pm.", "location": "Study", "time": "9pm"},
+        {"text": "Preparing tea in the Kitchen at 10pm.", "location": "Kitchen", "time": "10pm"},
     ],
     [
         {"text": "Hiding in the Attic at 11pm.", "location": "Attic", "time": "11pm"},
         {"text": "Praying alone in the Chapel at midnight.", "location": "Chapel", "time": "Midnight"},
         {"text": "Examining old maps in the Study at 10pm.", "location": "Study", "time": "10pm"},
-        {"text": "Smoking in the Smoking Room at 11pm.", "location": "Smoking Room", "time": "11pm"}
-    ]
-]
-
-
-motive_pools = [
-    [
-        {
-            "short": "Fanaticism",
-            "long": "Driven by an obsessive devotion to forbidden rites and ancient faiths, often acting without regard for consequence."
-        },
-        {
-            "short": "Revenge",
-            "long": "Always considers revenge as a first option due to a quick temper and a deep disgust with the church's hypocrisy."
-        },
-        {
-            "short": "Jealousy",
-            "long": "Harbors envy for the Bishop's influence and resents being overlooked, fueling bitter rivalry."
-        },
-        {
-            "short": "Forbidden Love",
-            "long": "Secretly in love with someone close to the Bishop, willing to do anything to protect or possess them."
-        }
+        {"text": "Smoking in the Smoking Room at 11pm.", "location": "Smoking Room", "time": "11pm"},
+        {"text": "Polishing armor in the Armory at 10pm.", "location": "Armory", "time": "10pm"},
+        {"text": "Reading poetry in the West Bedchamber at 9pm.", "location": "West Bedchamber", "time": "9pm"},
+        {"text": "Inspecting the Vault at 11pm.", "location": "Vault", "time": "11pm"},
+        {"text": "Feeding the birds in the Garden at dusk.", "location": "Garden", "time": "Dusk"},
     ],
     [
-        {
-            "short": "Desperation",
-            "long": "Haunted by debts and personal failures, willing to risk everything for a chance at redemption or escape."
-        },
-        {
-            "short": "Ambition",
-            "long": "Sees the Bishop's disappearance as a stepping stone to greater power within the church or society."
-        },
-        {
-            "short": "Fear",
-            "long": "Terrified of secrets being revealed, acts out of self-preservation and paranoia."
-        },
-        {
-            "short": "Blackmail",
-            "long": "Holds or is held by dangerous secrets, manipulating others to maintain control."
-        }
+        {"text": "Resting in the Guest Suite at 10pm.", "location": "Guest Suite", "time": "10pm"},
+        {"text": "Dusting shelves in the Library at 9pm.", "location": "Library", "time": "9pm"},
+        {"text": "Tending the fire in the Parlor at 8pm.", "location": "Parlor", "time": "8pm"},
+        {"text": "Inspecting the Wine Cellar at 11pm.", "location": "Wine Cellar", "time": "11pm"},
+        {"text": "Repairing a lantern in the Coach House at 9pm.", "location": "Coach House", "time": "9pm"},
+        {"text": "Sweeping the Servant's Quarters at 8pm.", "location": "Servant's Quarters", "time": "8pm"},
+        {"text": "Examining the clockwork in the Clock Tower at 10pm.", "location": "Clock Tower", "time": "10pm"},
+        {"text": "Arranging flowers in the Conservatory at 9pm.", "location": "Conservatory", "time": "9pm"},
     ],
     [
-        {
-            "short": "Obsession",
-            "long": "Fixated on unraveling cosmic mysteries, even at the cost of others' lives or sanity."
-        },
-        {
-            "short": "Greed",
-            "long": "Motivated by material gain, coveting the Bishop's wealth or relics."
-        },
-        {
-            "short": "Guilt",
-            "long": "Haunted by past misdeeds, desperate to cover up involvement in earlier crimes."
-        },
-        {
-            "short": "Loyalty",
-            "long": "Acts to protect a loved one or mentor, even if it means committing a terrible act."
-        }
+        {"text": "Sharpening knives in the Kitchen at 9pm.", "location": "Kitchen", "time": "9pm"},
+        {"text": "Cleaning the Nursery at 8pm.", "location": "Nursery", "time": "8pm"},
+        {"text": "Playing billiards in the Billiards Room at 10pm.", "location": "Billiards Room", "time": "10pm"},
+        {"text": "Inspecting the Master Bathroom at 11pm.", "location": "Master Bathroom", "time": "11pm"},
+        {"text": "Reading in the Tower Room at midnight.", "location": "Tower Room", "time": "Midnight"},
+        {"text": "Polishing silver in the Butler’s Pantry at 9pm.", "location": "Butler’s Pantry", "time": "9pm"},
+        {"text": "Feeding the dogs in the Gamekeeper’s Lodge at 8pm.", "location": "Gamekeeper’s Lodge", "time": "8pm"},
+        {"text": "Examining the Secret Laboratory at 11pm.", "location": "Secret Laboratory", "time": "11pm"},
     ],
     [
-        {
-            "short": "Resentment",
-            "long": "Nurtures a long-standing grudge against the Bishop for personal slights or injustices."
-        },
-        {
-            "short": "Zealotry",
-            "long": "Believes the Bishop's removal is a holy duty, convinced of their own righteousness."
-        },
-        {
-            "short": "Shame",
-            "long": "Driven by the need to hide a scandal or personal failing at any cost."
-        },
-        {
-            "short": "Manipulation",
-            "long": "Sees others as pawns, orchestrating events to serve a hidden agenda."
-        }
+        {"text": "Resting in the West Bedchamber at 10pm.", "location": "West Bedchamber", "time": "10pm"},
+        {"text": "Inspecting the Map Room at 9pm.", "location": "Map Room", "time": "9pm"},
+        {"text": "Admiring the view from the Tower Room at dusk.", "location": "Tower Room", "time": "Dusk"},
+        {"text": "Reading letters in the Servant's Quarters at 11pm.", "location": "Servant's Quarters", "time": "11pm"},
+        {"text": "Cleaning the Portrait Gallery at 8pm.", "location": "Portrait Gallery", "time": "8pm"},
+        {"text": "Arranging books in the Library at 8pm.", "location": "Library", "time": "8pm"},
+        {"text": "Inspecting the Vault at midnight.", "location": "Vault", "time": "Midnight"},
+        {"text": "Feeding the horses in the Stable at 9pm.", "location": "Horse Stable", "time": "9pm"},
     ]
 ]
 
@@ -705,12 +1342,88 @@ clue_motives = {
     "Blood-stained prayer book.": "Fanaticism",
     "Footprints leading to a sealed hatch.": "Ambition",
     "A coded diary mentioning a 'Summoning'.": "Revenge",
-    "An empty ritual circle drawn in chalk.": "Fanaticism",
     "A page torn from a forbidden tome.": "Blackmail",
     "A torn letter from the Bishop addressed to Lady Ashcroft.": "Forbidden Love",
     "A pawn ticket for a golden chalice, issued the day before the Bishop vanished.": "Desperation",
     "A threatening note warning the Bishop to abandon his 'awakening.'": "Fear"
 }
+
+means_pool = [
+    "had access to the Bishop's private study.",
+    "knows the secret passages of the manor.",
+    "is an expert in poisons and rare herbs.",
+    "possessed the chapel keys.",
+    "was seen near the Bishop's quarters.",
+    "had no known way to reach the Bishop.",
+    "had a duplicate key to the crypt.",
+    "was familiar with the manor's secret alarms."
+]
+
+knowledge_pool = [
+    "mentions the ritual circle in the cellar.",
+    "knows about the Bishop's last sermon.",
+    "saw the Bishop after midnight.",
+    "heard strange chanting from the chapel.",
+    "claims ignorance of the crime details.",
+    "describes a detail only the culprit would know.",
+    "recalls the Bishop's argument with a guest.",
+    "mentions a hidden passage behind the altar."
+]
+
+witnesses_pool = [
+    "I was seen by the maid, who can vouch for my whereabouts. She was dusting the hallway as I passed.\" Their eyes dart with a mixture of hope and anxiety, as if clinging to this alibi for safety.",
+    "I was alone, and no one can confirm my whereabouts. I realize how suspicious that sounds.\" Their posture is tense, shoulders hunched defensively, betraying a deep discomfort.",
+    "I saw another suspect nearby, though I can't be sure of the time. They seemed in a hurry.\" Their voice wavers, uncertain, and they avoid your gaze as if afraid of implicating themselves.",
+    "No one can confirm where I was. I kept to myself that night.\" Their hands fidget restlessly, and a shadow of doubt crosses their face.",
+    "I was with a group in the parlor, sharing drinks and stories. Several people can confirm this.\" Their tone is confident, but a flicker of nervousness betrays a need for validation.",
+    "The butler saw me in the corridor. He can confirm I was there.\" They stand a bit straighter, as if the memory of a witness offers some protection.",
+    "The gardener saw me outside, tending to the roses. I waved to them as I passed.\" Their expression is earnest, but a hint of worry lingers in their eyes.",
+    "The cook can vouch for me—I was in the kitchen helping with supper. We spoke for several minutes.\" Their lips press together, as if replaying the memory for reassurance."
+]
+
+financial_pool = [
+    "He owed me a great deal of money. I was desperate to collect my debts.\" Their jaw clenches, and a flicker of resentment passes over their features.",
+    "I have no interest in his wealth. Money has never motivated me.\" Their voice is steady, but their eyes narrow, as if daring you to doubt their sincerity.",
+    "I needed the Bishop's inheritance to pay off my creditors. It was my only hope.\" Their hands tremble slightly, betraying the strain of financial hardship.",
+    "I am not motivated by money. My needs are simple.\" They shrug, but a faint blush suggests embarrassment or perhaps a hidden truth.",
+    "I was desperate for funds after a string of bad luck. The Bishop's fortune was tempting.\" Their shoulders sag, and a weary sigh escapes them.",
+    "I am well-off and had no financial motive. My affairs are in order.\" They speak with calm assurance, but their gaze flickers to the side, as if recalling past temptations.",
+    "I lost a fortune in the war. The Bishop knew of my troubles.\" Their eyes darken with old grief, and their voice drops to a whisper.",
+    "I was promised a generous donation if I helped him. I never saw a penny.\" Their lips curl in frustration, and they cross their arms defensively."
+]
+
+secret_relationship_pool = [
+    "We were lovers, though we kept it hidden from everyone. Our bond was forbidden.\" Their cheeks flush, and they glance away, torn between shame and longing.",
+    "He threatened to expose my secret if I didn't comply. I was terrified.\" Their hands clench into fists, and a tremor runs through their voice.",
+    "We shared a forbidden bond, one that would ruin us both if revealed. I had no choice but to keep it secret.\" Their eyes dart nervously, and they swallow hard, haunted by the weight of secrecy.",
+    "There was nothing between us, I swear. Any rumors are lies.\" Their tone is defensive, and their jaw sets stubbornly.",
+    "He was like family to me. I would never harm him.\" Their expression softens, but a shadow of sorrow lingers.",
+    "We had a professional relationship only. Nothing more.\" Their words are clipped, and they maintain rigid posture, as if hiding discomfort.",
+    "He was my mentor, guiding me through difficult times. I owe him everything.\" Their gaze grows distant, and a note of regret colors their words.",
+    "We quarreled over a personal matter, but it was resolved. I bear no grudge.\" Their lips press into a thin line, and they shift uneasily."
+]
+
+blackmail_pool = [
+    "The Bishop was hiding something far worse than you know. I warned him, but he wouldn't listen.\" Their eyes flicker with fear, and their voice drops to a conspiratorial whisper.",
+    "Secrets are dangerous in this house. I have my own to protect.\" Their shoulders tense, and they scan the room as if expecting eavesdroppers.",
+    "I know nothing of blackmail. That's not my way.\" Their tone is flat, but their fingers drum nervously on the table.",
+    "He was being threatened by someone, but he never told me who. I wish I could help.\" Their brow furrows with concern, and they sigh heavily.",
+    "I warned him about his secrets. Some things are better left buried.\" Their gaze grows distant, and a shiver runs through them.",
+    "Blackmail is a dangerous game. I try to stay out of such affairs.\" Their lips twist in distaste, and they cross their arms protectively.",
+    "He confided in me about a blackmailer. I told him to go to the authorities.\" Their voice is earnest, but their eyes betray a flicker of guilt.",
+    "I received an anonymous threat as well. It frightened me deeply.\" Their hands shake, and they glance over their shoulder, visibly unsettled."
+]
+
+confession_pool = [
+    "I would never harm the Bishop! You have to believe me.\" Their voice cracks with desperation, and their eyes plead for understanding.",
+    "You have no proof! This is a witch hunt.\" Their face flushes with anger, and they clench their fists in frustration.",
+    "Fine, I admit it! I did what had to be done.\" Their shoulders slump in resignation, and a haunted look settles in their eyes.",
+    "This is absurd! I demand to speak to my solicitor.\" Their tone is indignant, but a bead of sweat betrays their anxiety.",
+    "I am innocent! I swear on my life.\" Their hands tremble, and their breathing quickens with panic.",
+    "You can't prove anything! Your case is full of holes.\" Their lips curl in defiance, but their gaze flickers with uncertainty.",
+    "I demand a lawyer! I won't say another word.\" Their jaw sets stubbornly, and they cross their arms in a show of resistance.",
+    "You don't understand what really happened! There's more to this than you know.\" Their voice is strained, and a shadow of fear passes over their features."
+]
 
 clue_locations = {}
 
@@ -737,6 +1450,18 @@ artifact_pool = [
         "name": "Silver Crucifix",
         "desc": "An ornate cross, tarnished with age. It seems to pulse with a faint warmth.",
         "effect": "faith",
+        "amount": "+1"
+    },
+    {
+        "name": "Silver Ornate Key",
+        "desc": "A beautifully crafted silver key, cold to the touch. It looks important.",
+        "effect": "unlock",
+        "amount": 1  # Unlocks a special door 
+    },
+    {
+        "name": "Abraxas Amulet",
+        "desc": "A dark, ornate amulet that seems to absorb light.",
+        "effect": "darkness",
         "amount": "+1"
     },
     {
@@ -838,17 +1563,17 @@ artifact_pool = [
         "effect": "unlock",
         "amount": 1  # Opens a secret passage or room
     },
-        {
-        "name": "Eidon Page 1",
-        "desc": "A torn, yellowed page inscribed with cryptic diagrams and ancient glyphs. It seems to hum with latent power."
+    {
+        "name": "First Fragment of the Eibon Manuscript",
+        "desc": "A brittle, yellowed page inked with spiraling glyphs. The words seem to shift when you look away."
     },
     {
-        "name": "Eidon Page 2",
-        "desc": "A brittle parchment page, its ink faded but the symbols still unsettling. The margin is stained with something dark."
+        "name": "Second Fragment of the Eibon Manuscript",
+        "desc": "A torn vellum leaf, its margins scorched. Faded diagrams hint at forbidden rituals beneath the surface."
     },
     {
-        "name": "Eidon Page 3",
-        "desc": "A page torn from the Book of Eidon, covered in frantic notes and a diagram of a swirling portal."
+        "name": "Third Fragment of the Eibon Manuscript",
+        "desc": "A page stained with something dark. The script is cramped and frantic, ending in a spiral that draws the eye inward."
     }
 ]
 
@@ -888,7 +1613,13 @@ def assign_scrying_lens_to_room():
 # Potions to be scattered
 potion_pool = [
     {"name": "Potion of Strength", "effect": "strength", "amount": 2, "desc": "A crimson tonic that invigorates the muscles."},
-    {"name": "Potion of Stamina", "effect": "stamina", "amount": 2, "desc": "A cloudy elixir that fortifies your endurance."}
+    {"name": "Potion of Stamina", "effect": "stamina", "amount": 2, "desc": "A cloudy elixir that fortifies your endurance."},
+    {"name": "Potion of Perception", "effect": "perception", "amount": 2, "desc": "A clear liquid that heightens your senses."},
+    {"name": "Potion of Agility", "effect": "agility", "amount": 2, "desc": "A sparkling draught that sharpens your reflexes."},
+    # {"name": "Potion of Insight", "effect": "perception", "amount": 2, "desc": "A shimmering draught that sharpens your mind."},
+    # {"name": "Potion of Endurance", "effect": "stamina", "amount": 2, "desc": "A bitter tonic that steels your body against fatigue."},
+    # {"name": "Potion of Zeal", "effect": "faith", "amount": 2, "desc": "A fiery potion that emboldens your spirit."},
+    # {"name": "Potion of Might", "effect": "strength", "amount": 2, "desc": "A thick, iron-tasting brew that fills you with raw power."}
 ]
 potion_locations = {}
 
@@ -915,10 +1646,10 @@ def assign_clues_to_rooms():
 def assign_artifacts_to_rooms():
     possible_rooms = [r for r in room_templates.keys() if r != "Foyer"]
     random.shuffle(possible_rooms)
-    # Always include the three Eidon Pages, plus 3 random other artifacts
-    eidon_pages = [a for a in artifact_pool if a["name"] in {"Eidon Page 1", "Eidon Page 2", "Eidon Page 3"}]
-    other_artifacts = [a for a in artifact_pool if a["name"] not in {"Eidon Page 1", "Eidon Page 2", "Eidon Page 3"}]
-    available_artifacts = eidon_pages + random.sample(other_artifacts, 3)
+    # Always include the three Eibon Pages, plus 3 random other artifacts
+    Eibon_pages = [a for a in artifact_pool if a["name"] in {"Eibon Page 1", "Eibon Page 2", "Eibon Page 3"}]
+    other_artifacts = [a for a in artifact_pool if a["name"] not in {"Eibon Page 1", "Eibon Page 2", "Eibon Page 3"}]
+    available_artifacts = Eibon_pages + random.sample(other_artifacts, 3)
     artifact_locations = {}
     for artifact, room in zip(available_artifacts, possible_rooms):
         artifact_locations[room] = artifact
@@ -946,7 +1677,7 @@ def clear():
 
 def delay_print(s, speed=0.01):
     """Prints text slowly, but finishes instantly if the user presses space or if speed=0."""
-    import msvcrt  # Windows only; for cross-platform, use 'getch' from 'getch' package
+    # import msvcrt  Windows only; for cross-platform, use 'getch' from 'getch' package
     import threading
 
     if speed == 0:
@@ -981,9 +1712,19 @@ def to_tuple(obj):
         return tuple(to_tuple(i) for i in obj)
     return obj
 
+def convert_sets(obj):
+    if isinstance(obj, set):
+        return list(obj)
+    elif isinstance(obj, dict):
+        return {k: convert_sets(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_sets(i) for i in obj]
+    else:
+        return obj
+
 def save_game():
     try:
-        game_state_copy = game_state.copy()
+        game_state_copy = convert_sets(game_state)
 
         # Convert tuple keys in visited_locations to strings for JSON
         visited_serializable = {str(k): v for k, v in game_state["visited_locations"].items()}
@@ -1145,27 +1886,20 @@ def move_to_new_room(direction=None, show_room=True):
     dx, dy = moves[direction]
     new_x, new_y = x + dx, y + dy
 
-    # Limit movement to within 16x16 grid
+    # Check map bounds
     if not (MAP_MIN <= new_x <= MAP_MAX and MAP_MIN <= new_y <= MAP_MAX):
         delay_print("You sense an unnatural barrier. The manor does not extend further in that direction.")
         wait_for_space()
         show_map()
         return
 
-    allowed_dirs = game_state["passages"].get((x, y), set())
-    if direction not in allowed_dirs:
-        delay_print("A wall or obstacle blocks your way. You cannot go that direction.")
-        wait_for_space()
-        show_map()
-        return
-
-    # --- Block movement through walls and locked doors, and allow unlocking with a key ---
-    walls = game_state.get("walls", set())
-    locked_doors = game_state.get("locked_doors", set())
     pos = (x, y)
     new_pos = (new_x, new_y)
+    walls = game_state.get("walls", set())
+    locked_doors = game_state.get("locked_doors", set())
+
+    # Check for wall
     if ((pos, new_pos) in walls):
-        # Reveal both cells for wall rendering in fog of war
         if "breadcrumbs" not in game_state or not isinstance(game_state["breadcrumbs"], set):
             game_state["breadcrumbs"] = set()
         game_state["breadcrumbs"].add(pos)
@@ -1174,42 +1908,48 @@ def move_to_new_room(direction=None, show_room=True):
         wait_for_space()
         show_map()
         return
+
+    # Check for locked door
     elif ((pos, new_pos) in locked_doors):
-        # Reveal both cells for door rendering in fog of war
         if "breadcrumbs" not in game_state or not isinstance(game_state["breadcrumbs"], set):
             game_state["breadcrumbs"] = set()
         game_state["breadcrumbs"].add(pos)
         game_state["breadcrumbs"].add(new_pos)
-        # Check for key in inventory
-        has_key = any(key in game_state["inventory"] for key in ["Strange Key", "Bent Key"])
+        has_key = any(key in game_state["inventory"] for key in ["Strange Key", "Bent Key", "Silver Ornate Key"])
         if has_key:
             print(f"{ORANGE}A locked door blocks your way. You have a key that might fit!{RESET}")
             use = input("Use a key to unlock the door? (Y/N): ").strip().lower()
             if use == "y":
-                # Remove one key from inventory (prioritize Strange Key)
-                for key in ["Strange Key", "Bent Key"]:
+                for key in ["Strange Key", "Bent Key", "Silver Ornate Key"]:
                     if key in game_state["inventory"]:
                         game_state["inventory"].remove(key)
                         delay_print(f"You use the {key} to unlock the door.")
                         break
-                # Unlock the door (remove from locked_doors both directions)
                 locked_doors.discard((pos, new_pos))
                 locked_doors.discard((new_pos, pos))
                 game_state["locked_doors"] = locked_doors
                 delay_print("The door unlocks with a satisfying click.")
                 wait_for_space()
-                # Now allow movement to proceed
             else:
                 delay_print("You decide not to use a key right now.")
                 wait_for_space()
                 show_map()
                 return
         else:
-            delay_print("A locked door blocks your way. You need a key to proceed.")
+            delay_print(ORANGE + "You are being held by a locked door. You need a key to proceed." + RESET)
             wait_for_space()
             show_map()
             return
 
+    # Check for passage
+    allowed_dirs = game_state["passages"].get((x, y), set())
+    if direction not in allowed_dirs:
+        delay_print("A wall blocks your way.")
+        wait_for_space()
+        show_map()
+        return
+
+    # Move to new position
     game_state["position"] = new_pos
 
     # Mark this room as visited in breadcrumbs
@@ -1226,19 +1966,8 @@ def move_to_new_room(direction=None, show_room=True):
     # Move suspects after player moves
     move_suspects()
 
-    # # Check for suspects in the same room
-    # suspects_here = [
-    #     s for s in game_state["suspects"]
-    #     if s.get("position") == game_state["position"]
-    # ]
-    # if suspects_here:
-    #     names = ', '.join(s["name"] for s in suspects_here)
-    #     delay_print(f"You see someone here: {names}")
-
     if show_room:
-        # wait_for_space()
-        game_state["score"] -= 1  # Encourage efficiency
-        describe_room()
+        game_state["score"] -= 1  # Encourage exploration by reducing score on movement
 
 def move_suspects():
     """Move each suspect to a random adjacent visited room, or let them stand still for 1-2 turns."""
@@ -1327,15 +2056,49 @@ def show_journal():
                     lines.pop(1)
                 entry = "\n".join(lines)
             delay_print(entry)
+            print("-----------------------------")
     if not clues and not artifacts and not responses:
         delay_print("Your journal is empty.")
 
-    # Place the toggle at the end, just before wait_for_space
     print(f"\nHints are currently {'ON' if show_hints else 'OFF'}.")
-    print("[T] Toggle suspicion hints   [Enter] Continue\n")
+    # Only show [D] for suspects already interviewed
+    print(f"\nHints are currently {'ON' if show_hints else 'OFF'}.")
+    if show_hints:
+        for s in game_state["suspects"]:
+            opp = s.get("opportunity", "uncertain")
+            if opp == "strong":
+                print(f"{ORANGE}Hint: {s['name']} had strong opportunity.{RESET}")
+            elif opp == "weak":
+                print(f"{YELLOW}Hint: {s['name']} had weak opportunity.{RESET}")
+            else:
+                print(f"{GREY}Hint: {s['name']}'s opportunity is uncertain.{RESET}")
+    interviewed = [s for s in game_state["suspects"] if s["name"] in game_state.get("suspects_interrogated", set())]
+    if interviewed:
+        print("[T] Toggle suspicion hints   [D] Deduction tree for an interviewed suspect   [Enter] Continue\n")
+    else:
+        print("[T] Toggle suspicion hints   [Enter] Continue\n")
     choice = input("> ").strip().lower()
     if choice == "t":
         game_state["show_suspicion_hints"] = not show_hints
+        show_journal()
+        return
+    elif choice == "d" and interviewed:
+        print("\nEnter the suspect's name (or number) for deduction tree:")
+        for idx, s in enumerate(interviewed, 1):
+            print(f"[{idx}] {s['name']}")
+        suspect_input = input("> ").strip()
+        if suspect_input.isdigit():
+            idx = int(suspect_input) - 1
+            if 0 <= idx < len(interviewed):
+                suspect_name = interviewed[idx]["name"]
+            else:
+                print("Invalid number.")
+                wait_for_space()
+                show_journal()
+                return
+        else:
+            suspect_name = suspect_input
+        deduction_tree_for_suspect(suspect_name)
         show_journal()
         return
 
@@ -1424,7 +2187,7 @@ def show_map():
     clear()
     location = game_state["location"]
     pos = game_state["position"]
-    print(f"Current Location: {location} at {pos}")
+    print(f"{YELLOW}Current Location: {location} at {pos}{RESET}")
     look_around(pause=False, instant=True)  # Show short description under current location
 
     delay_print("\nMap:", speed=0)
@@ -1445,7 +2208,6 @@ def show_map():
 
     print("\nUse arrow keys or N/S/E/W to move, or press Enter to return to the action menu.")
 
-    import msvcrt
     if "last_alerted_position" not in globals():
         last_alerted_position = None
 
@@ -1511,9 +2273,66 @@ def show_map():
             show_map()
             return
 
+def deduction_tree_for_suspect(suspect_name):
+    suspect = next((s for s in game_state["suspects"] if s["name"].lower() == suspect_name.lower()), None)
+    if not suspect:
+        print(f"No suspect named '{suspect_name}' found.")
+        wait_for_space()
+        return
+
+    asked = suspect.get("asked", set())
+    print(f"\nDeduction Tree for {suspect['name']} ({suspect.get('trait', 'Unknown')}):")
+    print("Start")
+    print("│")
+
+    # Motive
+    if "motive" in asked:
+        print(f"├─ Motive: {suspect.get('motive', 'Unknown')}")
+    # Alibi
+    if "alibi" in asked:
+        print(f"├─ Alibi: {suspect.get('alibi', 'Unknown')}")
+    # Relationship
+    if "relationship" in asked:
+        print(f"├─ Relationship: {suspect.get('relationship', 'Unknown')}")
+    # Means
+    if "means" in asked:
+        print(f"├─ Means: {suspect.get('means', 'Unknown')}")
+    # Knowledge
+    if "knowledge" in asked:
+        print(f"├─ Knowledge: {suspect.get('knowledge', 'Unknown')}")
+    # Witnesses
+    if "witnesses" in asked:
+        print(f"├─ Witnesses: {suspect.get('witnesses', 'Unknown')}")
+    # Financial
+    if "financial" in asked:
+        print(f"├─ Financial: {suspect.get('financial', 'Unknown')}")
+    # Secret Relationship
+    if "secret_relationship" in asked:
+        print(f"├─ Secret Relationship: {suspect.get('secret_relationship', 'Unknown')}")
+    # Blackmail/Occult
+    if "blackmail" in asked:
+        print(f"├─ Blackmail/Occult: {suspect.get('blackmail', 'Unknown')}")
+    # Confession
+    if "confession" in asked:
+        print(f"├─ Confession: {suspect.get('confession', 'Unknown')}")
+
+    # Opportunity (always shown)
+    opportunity = suspect.get("opportunity", "uncertain")
+    if opportunity == "strong":
+        print("├─ ✓ Had strong opportunity to commit the crime.")
+    elif opportunity == "weak":
+        print("├─ ? Had weak opportunity to commit the crime.")
+    else:
+        print("├─ ✗ Opportunity is uncertain or unlikely.")
+
+    print("└─ (Gather more evidence for a stronger deduction.)\n")
+    wait_for_space()
+
 def render_map(show_npcs=False, fog_of_war=False):
-    grid_size = 8  # Adjust as needed for your grid
-    half = grid_size // 2
+    """
+    Render the entire map grid (not just a window around the player).
+    Shows all rooms from MAP_MIN to MAP_MAX in both x and y, with a perimeter wall and a door.
+    """
     px, py = game_state["position"]
 
     suspect_positions = {}
@@ -1554,15 +2373,32 @@ def render_map(show_npcs=False, fog_of_war=False):
     locked_doors = game_state.get("locked_doors", set())
     visited = set(game_state["visited_locations"].keys())
 
-    for row_idx, y in enumerate(range(py - half, py + half + 1)):
+    # Use the full map bounds
+    min_x, max_x = MAP_MIN, MAP_MAX
+    min_y, max_y = MAP_MIN, MAP_MAX
+    grid_size = MAP_SIZE
+
+    # --- Draw top perimeter wall with a door in the center ---
+    top_row = ""
+    for x in range(min_x, max_x + 1):
+        # Place a door at the center of the north edge
+        if x == 0:
+            top_row += HORZ_DOOR * 3
+        else:
+            top_row += HORZ_WALL * 3
+    print(f"   {top_row}")
+
+    for row_idx, y in enumerate(range(min_y, max_y + 1)):
         row = ""
-        for x in range(px - half, px + half + 1):
+        # Left perimeter wall
+        row += VERT_WALL
+        for x in range(min_x, max_x + 1):
             pos = (x, y)
             char = "   "
             color = ""
             unexplored = fog_of_war and pos not in breadcrumbs
 
-            # Cell rendering
+            # Cell rendering (unchanged)
             if unexplored:
                 char = "   "
                 color = ""
@@ -1614,7 +2450,7 @@ def render_map(show_npcs=False, fog_of_war=False):
             row += f"{color}{char}{RESET}"
 
             # Only add vertical wall/space if not the last cell in the row
-            if x < px + half:
+            if x < max_x:
                 right_pos = (x + 1, y)
                 if fog_of_war:
                     if (not unexplored or right_pos in breadcrumbs):
@@ -1633,6 +2469,9 @@ def render_map(show_npcs=False, fog_of_war=False):
                         row += VERT_WALL
                     else:
                         row += SPACE
+        # Right perimeter wall
+        row += VERT_WALL
+
         # Print the map row with the corresponding legend line (if any)
         if row_idx < len(legend_lines):
             print(f"{row}   {legend_lines[row_idx]}")
@@ -1640,9 +2479,9 @@ def render_map(show_npcs=False, fog_of_war=False):
             print(row)
 
         # Draw horizontal walls/doors below this row (unless last row)
-        if row_idx < grid_size - 1:
-            wall_row = ""
-            for x in range(px - half, px + half + 1):
+        if y < max_y:
+            wall_row = VERT_WALL  # Left perimeter
+            for x in range(min_x, max_x + 1):
                 pos = (x, y)
                 below_pos = (x, y + 1)
                 if fog_of_war:
@@ -1663,7 +2502,7 @@ def render_map(show_npcs=False, fog_of_war=False):
                     else:
                         wall_row += SPACE * 3
                 # Only add vertical wall/space if not the last cell in the row
-                if x < px + half:
+                if x < max_x:
                     right_pos = (x + 1, y)
                     if fog_of_war:
                         if pos in breadcrumbs and right_pos in breadcrumbs:
@@ -1682,16 +2521,24 @@ def render_map(show_npcs=False, fog_of_war=False):
                             wall_row += VERT_WALL
                         else:
                             wall_row += SPACE
+            wall_row += VERT_WALL  # Right perimeter
             print(f"{wall_row}")
 
+    # --- Draw bottom perimeter wall ---
+    bottom_row = ""
+    for x in range(min_x, max_x + 1):
+        bottom_row += HORZ_WALL * 3
+    print(f"   {bottom_row}")
+
     print("\nSuspects:")
-    for idx, s in enumerate(game_state["suspects"], 1):
+    num_to_show = len(game_state.get("suspects", []))
+    for idx, s in enumerate(game_state["suspects"][:num_to_show], 1):
         name = s["name"]
         if name in game_state.get("suspects_interrogated", set()):
             color = YELLOW
         else:
             color = GREY
-        print(f"{color}{idx}. {name}{RESET}")     
+        print(f"{color}{idx}. {name}{RESET}")    
 
 def show_map_flow():
     """
@@ -1821,7 +2668,7 @@ You, {game_state['name']}, are to be my cloaked investigator. Unravel the truth�
 
 def use_item(return_func=None):
     # List of items to highlight in orange during combat
-    combat_highlight = {"Phial of Holy Water", "Silver Dagger"}
+    combat_highlight = {"Phial of Holy Water", "Silver Dagger", "Abraxas Amulet"}
     # Detect if called from combat by checking the return_func (lambda: None is used in combat)
     from_combat = return_func is not None and getattr(return_func, "__name__", "") == "<lambda>"
 
@@ -1853,7 +2700,17 @@ def use_item(return_func=None):
             if artifact:
                 # Apply main effect
                 if artifact.get("effect") in game_state:
-                    amt = artifact["amount"]
+                    if artifact["name"] == "Abraxas Amulet":
+                        delay_print(f"{ORANGE}You clutch the Abraxas Amulet. A protective aura surrounds you, warding off any monstrosity that dares approach!{RESET}")
+                        wait_for_space()
+                        if return_func:
+                            return_func()
+                        else:
+                            show_inventory()
+                        return
+                    # Apply main effect
+                    if artifact.get("effect") in game_state:
+                        amt = artifact["amount"]
                     if isinstance(amt, str) and amt.startswith("+"):
                         amt = int(amt)
                     game_state[artifact["effect"]] = min(18, game_state[artifact["effect"]] + int(amt))
@@ -1935,7 +2792,269 @@ def use_item(return_func=None):
             show_inventory()
     else:
         show_inventory()
+
+def skill_check_combat(enemy_name, enemy_difficulty=None, stat=None):
+    clear()
+    suspect = next((s for s in game_state["suspects"] if s["name"] == enemy_name), None)
+    delay_print(f"You face off against {enemy_name}. The air crackles with tension.")
+    wait_for_space()
+
+    player_stamina = game_state["stamina"]
+    player_strength = game_state["strength"]
+    player_agility = game_state["agility"]
+
+    if suspect:
+        enemy_stamina = suspect.get("stamina", 10)
+        enemy_strength = suspect.get("strength", 8)
+        enemy_agility = suspect.get("agility", 8)
+        enemy_name = suspect["name"]
+    else:
+        enemy_stamina = enemy_difficulty if enemy_difficulty is not None else 10
+        enemy_strength = 8
+        enemy_agility = 8
+
+    # --- DEFINE FLAVOR LISTS HERE ---
+    enemy_flavor = [
+        f"{enemy_name} lands a heavy blow to your ribs.",
+        f"{enemy_name} slams a fist into your shoulder.",
+        f"{enemy_name} catches you off guard with a quick punch.",
+        f"{enemy_name} drives you back with a sudden shove.",
+        f"{enemy_name} lands a glancing blow to your cheek.",
+        f"{enemy_name} strikes you with surprising force.",
+        f"{enemy_name}'s fingernails rip into your throat, leaving burning scratches.",
+        f"{enemy_name} grabs your hair and slams your head against the wall."
+    ]
+    gory_flavor = [
+        f"The monstrosity tries to rend the flesh from your bones!",
+        f"With a guttural roar, the creature's claws slash at your throat, spraying blood across the walls.",
+        f"The abomination lunges, jaws distending to snap at your face.",
+        f"Tentacles burst from its torso, writhing and seeking to strangle you.",
+        f"Your skin burns as acidic saliva drips from its fangs.",
+        f"It hammers you with inhuman strength, bones creaking under the impact.",
+        f"Eyes blink open across its body, all fixed hungrily on you.",
+        f"The thing's claws rake deep gouges into your side, hot blood pouring down.",
+        f"It shrieks, a sound that makes your vision blur and your heart pound with terror.",
+        f"With a sickening crunch, it bites into your shoulder, tearing flesh and muscle.",
+        f"Black ichor sprays as the beast's claws rip through your defenses.",
+        f"The horror's jaws snap shut inches from your face, spattering you with foul saliva.",
+        f"Your vision swims as the creature's tentacles squeeze the breath from your lungs.",
+        f"Bone and sinew snap as the abomination slams you against the wall.",
+        f"A dozen eyes blink open across its chest, all staring hungrily at you."
+    ]
+    horror_text = [
+        f"As {enemy_name} strikes you, their flesh ripples and splits, revealing writhing tentacles and lidless, unblinking eyes.",
+        f"{enemy_name}'s mouth distends impossibly wide, emitting a chorus of whispers in a language not meant for human ears.",
+        f"Your attacker’s skin sloughs away, replaced by a mass of chitinous plates and twitching, alien appendages.",
+        f"With a sickening crack, {enemy_name}'s limbs elongate and bend backwards, their face melting into a mass of wriggling feelers.",
+        f"The corpse of {enemy_name} convulses, sprouting glistening, phosphorescent tendrils that thrash blindly at the air."
+    ]
+    # --- END FLAVOR LISTS ---
+
+    round_num = 1
+    sanity_lost = 0  # Track total sanity loss in this combat
+    transformed = False  # Track if the suspect has transformed
+
+    while player_stamina > 0 and enemy_stamina > 0:
+        if round_num % 3 == 1 and round_num > 1:
+            clear()
+        if game_state["sanity"] < 4:
+            delay_print(RED + "WARNING: Your sanity is dangerously low!" + RESET)
+        if player_agility < 4:
+            delay_print(RED + "WARNING: Your agility is dangerously low!" + RESET)
+        if player_strength < 4:
+            delay_print(RED + "WARNING: Your strength is dangerously low!" + RESET)
+        if player_stamina < 4:
+            delay_print(RED + "WARNING: Your stamina is dangerously low!" + RESET)
+
+        delay_print(f"--- Melee Round {round_num} ---")
+        delay_print(f"Your Stamina: {player_stamina} | {enemy_name}'s Stamina: {enemy_stamina}")
+
+        # Show sanity every round after transformation
+        if transformed:
+            delay_print(f"Your Sanity: {game_state['sanity']}")
+
+        # --- Add combat options here ---
+        print("\nWhat will you do?")
+        print("[A] Attack")
+        if "Abraxas Amulet" in game_state["inventory"]:
+            print(f"{ORANGE}[U] Use an item (Abraxas Amulet wards off monstrosities!){RESET}")
+        else:
+            print("[U] Use an item")
+        print("[F] Flee")
+        print("[S] Show stats")
+
+        action = input("> ").strip().lower()
+        if action == "u":
+            use_item(lambda: None)
+            # Update player stats in case a potion/artifact was used
+            player_stamina = game_state["stamina"]
+            player_strength = game_state["strength"]
+            player_agility = game_state["agility"]
+            continue  # Skip to next round after using an item
+        elif action == "s":
+            show_stats()
+            continue
+        elif action == "f":
+            if transformed:
+                print(f"{ORANGE}[F] Flee for your life!{RESET} or press Enter to stand your ground.")
+                flee_choice = input("> ").strip().lower()
+                if flee_choice == "f":
+                    escaped = timing_bullseye_chase()
+                    if escaped:
+                        delay_print("You manage to escape the horror and slam the door behind you!")
+                        wait_for_space()
+                        describe_room()
+                        return
+                    else:
+                        delay_print("The horror catches you! You are forced to fight for your life!")
+                        # Continue combat as normal
+            else:
+                # Fleeing triggers an agility contest (Fudge roll)
+                player_agility_score = game_state["agility"] + roll_fudge()
+                enemy_agility_score = enemy_agility + roll_fudge()
+                delay_print(f"Your escape roll: {game_state['agility']} + die roll = {YELLOW}{player_agility_score}{RESET}")
+                delay_print(f"{enemy_name}'s pursuit roll: {enemy_agility} + die roll = {YELLOW}{enemy_agility_score}{RESET}")
+                if player_agility_score >= enemy_agility_score:
+                    delay_print(f"{YELLOW}You slip away before your opponent can react!{RESET}")
+                    wait_for_space()
+                    describe_room()
+                    return
+                else:
+                    delay_print(RED + "You try to flee, but your opponent catches you with a parting blow! (Stamina -2, Score -10)" + RESET)
+                    game_state["stamina"] = max(0, game_state["stamina"] - 2)
+                    game_state["score"] -= 10
+                    wait_for_space()
+                    describe_room()
+                    return
+
+        # Player's composite score
+        player_base = (player_strength + player_stamina + player_agility) // 3
+        player_roll = player_base + roll_fudge() + (player_agility - enemy_agility) // 2
+
+        # Enemy's composite score
+        enemy_base = (enemy_strength + enemy_stamina + enemy_agility) // 3
+        enemy_roll = enemy_base + roll_fudge() + (enemy_agility - player_agility) // 2
+
+        delay_print(f"Your combat score: {player_base} + die roll + agility mod = {YELLOW}{player_roll}{RESET}")
+        delay_print(f"Enemy combat score: {enemy_base} + die roll + agility mod = {YELLOW}{enemy_roll}{RESET}")
+
+        if player_roll >= enemy_roll:
+            # Player hits enemy
+            player_damage = max(1, 1 + (player_strength - enemy_strength) // 4)
+            delay_print(YELLOW + f"You strike {enemy_name} for {player_damage} damage!" + RESET)
+            enemy_stamina -= player_damage
+        else:
+            damage = max(1, 1 + (enemy_strength - player_strength) // 4)
+            # Faith reduces supernatural damage from transformed foes
+            if transformed and game_state["faith"] >= 14:
+                delay_print(f"{ORANGE}Your faith shields you from the worst of the supernatural assault! (Damage halved){RESET}")
+                damage = max(1, damage // 2)
+            elder_god_twist = False
+            if suspect and random.random() < 0.15 and sanity_lost == 0:
+                elder_god_twist = True
+            if elder_god_twist:
+                # --- Transformation occurs here ---
+                if not transformed:
+                    if "Abraxas Amulet" in game_state["inventory"]:
+                        delay_print(f"{ORANGE}As the suspect transforms into a monstrosity, the Abraxas Amulet glows with a fierce light! The horror recoils and cannot approach you while you wear it.{RESET}")
+                        delay_print(f"{ORANGE}You are protected from the monstrosity's attacks as long as you possess the Amulet.{RESET}")
+                        # Skip transformation attack, continue combat but player cannot be harmed by the monstrosity
+                        transformed = True
+                        continue  # Go to next round, player is safe
         
+                    delay_print(RED + "The suspect's body contorts and transforms into a monstrous horror! A hideous, wet cracking echoes through the room as the suspect's flesh ripples and splits. Limbs elongate, bones twist, and eyes bloom like fungus across their writhing form. What once was human is now a blasphemous shape, a thing of nightmare and cosmic dread, shrieking in a chorus of voices not meant for mortal ears." + RESET)
+                    enemy_strength += 1
+                    if suspect:
+                        suspect["strength"] = enemy_strength
+                    transformed = True
+                            # --- Offer flee option here ---
+                    print(f"{ORANGE}[F] Flee for your life!{RESET} or press Enter to stand your ground.")
+                    flee_choice = input("> ").strip().lower()
+                    if flee_choice == "f":
+                        escaped = timing_bullseye_chase()
+                        if escaped:
+                            delay_print("You manage to escape the horror and slam the door behind you!")
+                            wait_for_space()
+                            describe_room()
+                            return
+                        else:
+                            delay_print("The horror catches you! You are forced to fight for your life!")
+                            # Continue combat as normal
+                delay_print(f"Your Sanity: {game_state['sanity']}")
+                delay_print(ORANGE + random.choice(gory_flavor) + RESET)
+                delay_print(f"You lose {damage} stamina.")
+                delay_print("\n" + random.choice(horror_text))
+                delay_print("You reel in terror as the truth is revealed: this was no mere mortal, but a servant of some higher unspeakable evil from some other upside down plane of existence!")
+                game_state["sanity"] = max(0, game_state["sanity"] - 1)
+                sanity_lost = 2
+            else:
+                if transformed:
+                    delay_print(ORANGE + random.choice(gory_flavor) + RESET)
+                    delay_print(f"You lose {damage} stamina.")
+                    delay_print("\n" + random.choice(horror_text))
+                else:
+                    delay_print(ORANGE + random.choice(enemy_flavor) + RESET)
+                    delay_print(f"You lose {damage} stamina.")
+                player_stamina -= damage
+
+        delay_print(f"Your Stamina: {player_stamina} | {enemy_name}'s Stamina: {enemy_stamina}")
+        round_num += 1
+        wait_for_space()
+
+    # End of combat (rest of your function unchanged)
+    game_state["stamina"] = player_stamina
+    if suspect:
+        suspect["stamina"] = enemy_stamina
+
+    if player_stamina > 0:
+        if suspect and 'transformed' in locals() and transformed:
+            delay_print(f"{RED}The monstrous remains of {enemy_name} collapse, oozing ichor and twitching as the unnatural life leaves them. The horror is over—for now.{RESET}")
+            print("P̴̧̧͔̦̲͙͉̘̰̜͎̤̻̹̤͋̀̈́̄́̂͐͂̈́̓͐͒͜͝h̴̡̡̡̲͓̜̬͎̖̟̞̦͙̑̀͊̎̌̐̆̽̆̈́̆͌̕ͅ'̶̜̟͛̉̎̅̿̊n̴͇̟͋g̴̥̦̟̘̝̱͉̲̤͙͇͋̄̐̏͊̔͌́͛̇l̶̡͙̻̗̩̬̣̰͚̯̲̉̃̒́͛͆͋̀͛͆̃͜͝ụ̷̧̧͎̯̜͕̻̘̬̙̱͈͛͐ͅi̴̖͓̥͔͕͍̮͇̼͚̗̭̻͌̈́̈́̈́͊̿̀͆͋̀͌̍̀̍͜͠͠͝ ̵̢̩̟̫̣̪̬͍̳̞̰͕̝͚̣͗͛̈́͘̚m̷̛͔̱̎̐̊̀͐̑͆̑̈́͛͘͝g̸̡̨͛͒̈͆͝l̸̡̨͕̣͎̙͕̥͛̎͆̊͛̋̍̿͐̅̄̋̔̈́̓̕͝w̵̧̖̟̠̼̠̼̗̜̱͈̮̩͆'̴͕̟̹͙̝̼͖̟̈̃̈́̉͛̀͛̂͘͝n̸̲̜̭̪̩̅͌̀̏͛̅̎̋͑͐̏̈́̽̌͝͝a̵̡̫͙̻͓͉͈͈͉̙͑͗͗͝f̵̨̖̯̳̮̳̼̺̠̰̘̘̙̗͍͖͆͑̀͂͋̈̑̈͜͝h̸͏̡̛͈̱͇͉̯̹̘͋̄̾̽͋́͂͛̊̕͝ ̸̧̣̫̳̥̥̲̖̻̭̾̅̎́̀̓̉́̇̕͝͝ͅͅw̴̨͖̼͕͉͍̺͐́̈̈́ģ̴̛̫͎̼̥͕̦̮͈̩̺̈́̃̇a̶̛̱͔̩̦͙͇̖͚̲̙͖͚͎͈̓͑̀͒ḩ̶̨̝̺͚͎̺̙͕̞̂͐̂́̈́̍͛͝ͅ'̵͚̝̝̩̗̭̦̇̐̈́̃̊̌̔́̌͝͝͝ͅņ̴̗͕̬̞̻̼̜̥͈̣̬͇̦̻͖̏́̓͒̈́͐́͠ͅa̸̹̟̯͈̣͖͙͝g̴̨̼̤̜̥̼̰͈̞̪̙̭̅̃͛̆l̸͚̗͉̖̰̿̊͐͌̈́̃ͅ ̷̟͇͕̘̰̤͖̰̜̝̰̗̼̟̱͖̂̈̈́̔̌̊̕͜f̸̧̲̬̤͍̙̰͎̲͖̭̜̖̫̅̒́̃͜h̴̛̩̫͕̣̻͛́́̏̈́̐ẗ̵̨̛̛̻̻͉̗̲̙̠̦̜̔̾͒̑͂̈́͑̏̈͊̊͋ͅa̷̢̰͍̞̭̗̜̣̒̔͑ǧ̴̨̱̘̣͕͙̘̺͍̦̒͌́̓̎͋n̴͍͔͔͙̰͐͜!")
+            game_state["score"] -= 15
+            delay_print("You have taken a life in self-defense. The weight of this act will haunt you. (-15 Score)")
+            suspect["stamina"] = 0
+            if suspect in game_state["suspects"]:
+                game_state["suspects"].remove(suspect)
+        else:
+            delay_print(f"You overcome the threat posed by {enemy_name}! You live to investigate another day.")
+            game_state["journal"].append(f"Survived combat against {enemy_name}.")
+            if suspect:
+                suspect["stamina"] = 0
+                if suspect in game_state["suspects"]:
+                    game_state["suspects"].remove(suspect)
+    else:
+        delay_print(f"The encounter with {enemy_name} overwhelms you...")
+        game_state["journal"].append(f"Defeated by {enemy_name}. Survived, but barely.")
+
+    if suspect and suspect.get("is_murderer") and player_stamina > 0:
+        game_state["score"] -= 25
+        delay_print(f"As {suspect['name']} falls, the truth is revealed: {suspect['name']} was the murderer all along!")
+        delay_print("But justice through violence is not justice at all. The Commissioner is furious at your methods.")
+        delay_print("You have failed to solve the mystery through deduction. The case is closed in disgrace.")
+        print(RED + r"""
+ __     __           _                    
+ \ \   / /          | |                   
+  \ \_/ /__  _   _  | |     ___  ___  ___ 
+   \   / _ \| | | | | |    / _ \/ __|/ _ \
+    | | (_) | |_| | | |___| (_) \__ \  __/
+    |_|\___/ \__,_| |______\___/|___/\___|
+    """ + RESET)        
+        delay_print("Sorry!")
+        show_score()
+        wait_for_space()
+        title_screen()
+        return
+
+    if player_stamina <= 0:
+        delay_print("You have succumbed to exhaustion. The investigation ends here.")
+        game_state["score"] -= 35
+        show_score()
+        # wait_for_space()
+        title_screen()
+    else:
+        wait_for_space()
+
+
 def handle_input(user_input, return_function):
     global previous_menu_function
 
@@ -1944,6 +3063,7 @@ def handle_input(user_input, return_function):
         return  # Prevent falling through to other cases
     elif user_input == "score":
         show_score()
+        wait_for_space()
         return_function()
     elif user_input == "help":
         show_help()
@@ -2137,6 +3257,21 @@ def distort_text(text, sanity):
         # Zalgo/unicode glitch
         return zalgo(text)
 
+def lock_all_doors():
+    game_state["locked_doors"] = set()
+    for pos, exits in game_state["passages"].items():
+        for dir_name in exits:
+            dx, dy = DIRECTIONS[dir_name]
+            neighbor = (pos[0] + dx, pos[1] + dy)
+            # Lock both directions
+            game_state["locked_doors"].add((pos, neighbor))
+            game_state["locked_doors"].add((neighbor, pos))
+
+def place_silver_key():
+    possible_rooms = [r for r in room_templates.keys() if r != "Foyer"]
+    key_room = random.choice(possible_rooms)
+    game_state.setdefault("artifact_locations", {})[key_room] = next(a for a in artifact_pool if a["name"] == "Silver Ornate Key")
+
 def add_random_clue():
     room = game_state["location"]
     found_something = False
@@ -2154,7 +3289,7 @@ def add_random_clue():
             game_state["journal"].append(f"CLUE FOUND at {game_state['location']}: {clue}")
             game_state["score"] += 10  # Add to score for finding a clue
             game_state["score_log"].append(f"Clue: {clue} [+10]")
-            print(f"[DEBUG] Score after finding clue: {game_state['score']}")
+            # print(f"[DEBUG] Score after finding clue: {game_state['score']}")
             found_something = True
 
     # Scrying Lens logic
@@ -2189,7 +3324,7 @@ def add_random_clue():
         game_state["inventory"].append(artifact["name"])
         delay_print(f"You found {artifact['name']}! {artifact['desc']}")
         game_state["score"] += 20  # Add to score for finding an artifact
-        print(f"[DEBUG] Score after finding artifact: {game_state['score']}")
+        # print(f"[DEBUG] Score after finding artifact: {game_state['score']}")
         game_state["journal"].append(f"ARTIFACT FOUND at {game_state['location']}: {artifact['name']}")
         game_state["score_log"].append(f"Artifact: {artifact['name']} [+20]") 
         # Remove this artifact from all other rooms so it can't be found again
@@ -2197,6 +3332,20 @@ def add_random_clue():
             if game_state["artifact_locations"][r]["name"] == artifact["name"] and r != room:
                 del game_state["artifact_locations"][r]
         found_something = True
+
+        # --- Add Eibon quest if first fragment is found ---
+        if artifact["name"] in {
+            "First Fragment of the Eibon Manuscript",
+            "Second Fragment of the Eibon Manuscript",
+            "Third Fragment of the Eibon Manuscript"
+        }:
+            quest_text = "Assemble the Book of Eibon by finding all three manuscript fragments."
+            if quest_text not in game_state["quests"]:
+                game_state["quests"].append(quest_text)
+                delay_print(f"{YELLOW}Quest added: {quest_text}{RESET}")
+    # Check if the artifact is the final Eibon fragment
+    if artifact and artifact["name"] == "Third Fragment of the Eibon Manuscript":
+        delay_print(f"{YELLOW}Quest updated: {quest_text}{RESET}")  
 
     # Elder Sign logic
     if (
@@ -2219,7 +3368,102 @@ def add_random_clue():
     # room = game_state["location"]
     # found_something = False
 
-    
+def final_boss_sequence():
+    clear()
+    delay_print(f"{RED}The portal yawns wide, swirling with impossible colors and the sound of distant, maddening flutes.{RESET}")
+    delay_print("Do you dare to step through and confront the source of all this horror?")
+    print(f"{ORANGE}Enter the portal to the Elder Ones' realm? (Y/N){RESET}")
+    choice = input("> ").strip().lower()
+    if choice != "y":
+        delay_print("You step back from the brink. The portal closes, leaving you trembling but alive.")
+        delay_print(f"Final Score: {game_state['score']}")
+        save_game()
+        title_screen()
+        return
+
+    # --- Narration: Arrival in R'lyeh ---
+    clear()
+    delay_print(f"{RED}You step through the portal. Reality twists and shudders. You find yourself in R'lyeh, the sunken city of the Elder Ones.{RESET}")
+    delay_print("Cyclopean towers rise at impossible angles, and the sky churns with colors that have no name. The air is thick with the scent of brine and blood.")
+    delay_print("At the heart of the city, you see Azathoth—the Blind Idiot God, the center of all chaos—writhing in a mass of tentacles and eyes.")
+    delay_print("Between you and Azathoth lies the mutilated corpse of the Bishop, splayed open upon a slab of black stone. His chest is hollowed, ribs cracked wide, and his face is frozen in a rictus of agony. Blood and ichor pool at your feet, seeping into the cracks of the alien pavement.")
+    delay_print(f"{RED}Azathoth's voice booms in your mind, a cacophony of flutes and screams:{RESET}")
+    delay_print(
+        "\"The Bishop's flesh was the key. His soul, the price. Only by restoring the dreaming center of reality can both our realms persist.\"\n"
+        "\"You, little spark, are a threat to the balance. But I have need of you yet...\""
+    )
+    delay_print("Azathoth's form surges forward, a tidal wave of madness and power. You ready yourself for the final confrontation.")
+
+    # --- Boss Fight Setup ---
+    player_stamina = max(1, game_state.get("stamina", 10))
+    azathoth_stamina = 3  # Make this as tough as you like
+    has_amulet = "Abraxas Amulet" in game_state["inventory"]
+
+    while player_stamina > 1 and azathoth_stamina > 0:
+        clear()
+        delay_print(f"{RED}Azathoth looms before you, a storm of chaos and hunger!{RESET}")
+        delay_print(f"Your Stamina: {player_stamina} | Azathoth's Power: {azathoth_stamina}")
+        print("\nWhat will you do?")
+        print("[A] Attack")
+        if has_amulet:
+            print(f"{ORANGE}[U] Use Abraxas Amulet{RESET}")
+        else:
+            print("[U] Use an item (futile)")
+        print("[F] Flee (impossible)")
+        action = input("> ").strip().lower()
+
+        if action == "u" and has_amulet:
+            delay_print(f"{ORANGE}You brandish the Abraxas Amulet. It blazes with a blinding light, momentarily holding Azathoth at bay!{RESET}")
+            delay_print("To strike a blow, you must time your attack perfectly...")
+            hit = timing_bullseye_chase(rounds=1, escape_distance=2)
+            if hit:
+                azathoth_stamina -= 1
+                delay_print(f"{YELLOW}The amulet's power sears Azathoth! His form recoils, shrieking in a thousand voices!{RESET}")
+                if azathoth_stamina == 0:
+                    break
+            else:
+                delay_print(f"{RED}You miss your moment. Azathoth's power crashes over you!{RESET}")
+                player_stamina = max(1, player_stamina - 1)
+        elif action == "a":
+            delay_print(f"{RED}You strike at Azathoth, but your attack passes through empty chaos. It is utterly futile!{RESET}")
+            delay_print("Azathoth lashes out in return!")
+            player_stamina = max(1, player_stamina - 1)
+        elif action == "u":
+            delay_print(f"{RED}You use an item, but nothing in your possession can harm Azathoth!{RESET}")
+            delay_print("Azathoth lashes out in return!")
+            player_stamina = max(1, player_stamina - 1)
+        elif action == "f":
+            delay_print(f"{RED}There is no escape from R'lyeh. The city closes in around you!{RESET}")
+            player_stamina = max(1, player_stamina - 1)
+        else:
+            delay_print("You hesitate, and Azathoth's power batters your mind and body!")
+            player_stamina = max(1, player_stamina - 1)
+
+    # --- Endings ---
+    if azathoth_stamina == 0:
+        delay_print(f"{YELLOW}With a final, perfect strike, the Abraxas Amulet unleashes a torrent of light!{RESET}")
+        delay_print(f"{RED}Azathoth howls, his form unraveling into a storm of darkness and sound. The city trembles as the Blind Idiot God is banished into exile, his presence torn from both realms!{RESET}")
+        delay_print("The portal snaps shut behind you. You collapse, gasping, back in the manor, the Book of Eibon pulsing with spent power in your hands.")
+        delay_print(f"{YELLOW}You have defeated Azathoth and saved both worlds—for now. Your legend will echo through the ages!{RESET}")
+        game_state["score"] += 100
+        delay_print(f"Final Score: {game_state['score']}")
+        save_game()
+        title_screen()
+        return
+    else:
+        delay_print(f"{RED}Azathoth's power overwhelms you. You collapse, barely clinging to life. The Blind Idiot God looms over you, but does not strike the final blow.{RESET}")
+        delay_print(
+            "\"You will live, little spark. I have need of you yet. There are other doors to open, other worlds to shatter. Rest now, and await my call...\""
+        )
+        delay_print("You awaken in the manor, forever changed by what you have seen. The Book of Eibon lies heavy in your hands, its pages blank and cold.")
+        delay_print(f"Final Score: {game_state['score']}")
+        save_game()
+        title_screen()
+        return
+
+# --- Insert this call in case_resolution() and interrogate_suspect() after the portal is opened and all Eibon pages are collected ---
+
+   
 def show_score():
     clear()
     delay_print(f"Final Score: {game_state['score']}")
@@ -2264,7 +3508,7 @@ def show_score():
     print("Stamina dropped to 0: -25")
     print("Sanity dropped to 0: -50")
     print("Killing any suspect: -30")
-    wait_for_space("Press SPACE to continue.")
+    # wait_for_space("Press SPACE to continue.")
 
 def case_resolution():
     delay_print("You gather your thoughts and review the case... Pages of notes flicker in your mind like a shuffled deck of ghosts.")
@@ -2272,7 +3516,11 @@ def case_resolution():
         # List suspects for accusation
         print("\nWho do you accuse of the Bishop's disappearance?")
         for idx, suspect in enumerate(game_state["suspects"], 1):
-            print(f"[{idx}] {suspect['name']}")
+            name = suspect['name']
+            if name in game_state.get("suspects_interrogated", set()):
+                print(f"{YELLOW}[{idx}] {name} (interrogated){RESET}")
+            else:
+                print(f"[{idx}] {name}")
         print(f"[{len(game_state['suspects'])+1}] Cancel")
         while True:
             choice = input("> ").strip()
@@ -2288,44 +3536,91 @@ def case_resolution():
 
         # Reveal the outcome
         if accused.get("is_murderer"):
+            crime = game_state.get("crime_type", "disappearance")
             delay_print(f"{YELLOW}You accuse {accused['name']}... and the evidence is overwhelming! The culprit breaks down and confesses!{RESET}")
+            # Reveal the true fate of the Bishop based on crime_type
+            if crime == "murder":
+                delay_print(f"The truth is revealed: {accused['name']} murdered the Bishop in a fit of {accused['motive'].lower()}.")
+            elif crime == "kidnapping":
+                delay_print(f"{accused['name']} kidnapped the Bishop, driven by {accused['motive'].lower()}.")
+            elif crime == "ritual sacrifice":
+                delay_print(f"{accused['name']} performed a forbidden ritual, sacrificing the Bishop for {accused['motive'].lower()} reasons.")
+            elif crime == "blackmail":
+                delay_print(f"{accused['name']} blackmailed the Bishop, forcing his disappearance out of {accused['motive'].lower()}.")
+            elif crime == "forced exile":
+                delay_print(f"{accused['name']} orchestrated the Bishop's exile, motivated by {accused['motive'].lower()}.")
+            else:
+                delay_print(f"{accused['name']} is the culprit, the one responsible for the Bishop's disappearance.")
             delay_print("Justice is served. The Bishop's fate is finally known.")
-            game_state["score"] += 100  # Add to score for solving the case
-            game_state["journal"].append(f"Case solved: {accused['name']} was the culprit.")
+   
+            # After solving the case, before adding the Eibon quest:
+            main_quest = "Investigate the disappearance of the Bishop."
+            if main_quest in game_state["quests"]:
+                idx = game_state["quests"].index(main_quest)
+                # Mark as complete with strikethrough
+                game_state["quests"][idx] = f"\033[9m{main_quest}\033[0m"
             delay_print("As the constables move to apprehend the culprit, a heavy tome falls from their coat and lands at your feet.")
-            delay_print(f"{ORANGE}It is the legendary Book of Eidon!{RESET}")
-            delay_print(f"{accused['name']} laughs maniacally: 'Futile, futile! The pages are scattered—you are but a child before its cosmic design! Its power is not meant for mortal minds, and your sanity would shatter should you glimpse its truth! It's raw power! Cahf ah nafl mglw'nafh hh' ahor syha'h ah'legeth, ng llll or'azath syha'hnahh n'ghftephai n'gha ahornah ah'mglw'nafh!")
-           
-            # Add Book of Eidon to inventory
-            if "Book of Eidon" not in game_state["inventory"]:
-                game_state["inventory"].append("Book of Eidon")
-                game_state["journal"].append("You have obtained the Book of Eidon, but it is incomplete.")
+            delay_print(f"{ORANGE}It is the legendary Book of Eibon!{RESET}")
+            delay_print(
+                f"{accused['name']} laughs maniacally: "
+                "'Futile, futile! The pages are scattered—you are but a child before its cosmic design! "
+                "Its power is not meant for mortal minds, and your sanity would shatter should you glimpse its truth! Cahf ah nafl mglw'nafh hh' ahor syha'h ah'legeth, ng llll or'azath syha'hnahh n'ghftephai n'gha ahornah ah'mglw'nafh'"
+            )
+            # Add Book of Eibon to inventory
+            if "Book of Eibon" not in game_state["inventory"]:
+                game_state["inventory"].append("Book of Eibon")
+                game_state["journal"].append("You have obtained the Book of Eibon, but it is incomplete.")
             # Check for pages
-            required_pages = {"Eidon Page 1", "Eidon Page 2", "Eidon Page 3"}
-            player_pages = set(item for item in game_state["inventory"] if item.startswith("Eidon Page"))
+            required_pages = {
+                "First Fragment of the Eibon Manuscript",
+                "Second Fragment of the Eibon Manuscript",
+                "Third Fragment of the Eibon Manuscript"
+            }
+            player_pages = set(item for item in game_state["inventory"] if "Fragment of the Eibon Manuscript" in item)
             if required_pages.issubset(player_pages):
                 delay_print(f"{YELLOW}You have all three missing pages!{RESET}")
-                delay_print("As you assemble the Book of Eidon with its missing pages, the air grows cold and reality begins to warp...")
+                delay_print("As you assemble the Book of Eibon with its missing pages, the air grows cold and reality begins to warp...")
                 delay_print(f"{RED}A portal to the realm of the Elder Ones opens before you!{RESET}")
-                # Trigger special ending or event here
-                game_state["journal"].append("You have assembled the Book of Eidon and opened the portal to the Elder Ones' realm.")
-                # You can add a function call here for the special ending if desired
+                game_state["journal"].append("You have assembled the Book of Eibon and opened the portal to the Elder Ones' realm.")
+                final_boss_sequence()
+                return
             else:
                 missing = required_pages - player_pages
                 delay_print(f"{ORANGE}You are missing the following pages: {', '.join(sorted(missing))}.{RESET}")
-                delay_print("You sense that if you can find the missing pages and return, the Book of Eidon will reveal its true power...")
-                game_state["journal"].append("You must search the manor for the missing pages of the Book of Eidon.")
-            delay_print("You have solved the case! Your score is now: " + str(game_state["score"]))
+                delay_print("You sense that if you can find the missing pages and return, the Book of Eibon will reveal its true power...")
+                game_state["journal"].append("You must search the manor for the missing pages of the Book of Eibon.")
+                # Add quest to logbook if not already present
+                quest_text = "Assemble the Book of Eibon by finding all three manuscript fragments."
+                if quest_text not in game_state["quests"]:
+                    game_state["quests"].append(quest_text)
+                delay_print("You may continue your investigation to seek out the missing pages, or quit to the title screen.")
+                while True:
+                    print("[C] Continue searching for the missing pages")
+                    print("[Q] Quit to title")
+                    choice = input("> ").strip().lower()
+                    if choice == "c":
+                        # Remove the accused from suspects so they can't be interrogated anymore
+                        if accused in game_state["suspects"]:
+                            game_state["suspects"].remove(accused)
+                        describe_room()
+                        return
+                    elif choice == "q":
+                        title_screen()
+                        return
+                    else:
+                        print("Please select C or Q.")
+                # Do not fall through to the next lines
+            
         else:
             delay_print(f"{RED}You accuse {accused['name']}, but the evidence does not hold. The real culprit remains at large...{RESET}")
             game_state["score"] -= 30
             game_state["journal"].append(f"Case failed: Wrongly accused {accused['name']}.")
             delay_print("You have failed to solve the case. The shadows of the manor seem to deepen.")
-        save_game()
+            title_screen()
+            return
+         
     else:
         delay_print("There are still missing pieces. They flit just beyond comprehension like shadows behind stained glass.")
-    wait_for_space()
-    title_screen()
 
 def describe_room():
     global previous_menu_function
@@ -2341,10 +3636,10 @@ def describe_room():
         names = ', '.join(s["name"] for s in suspects_here)
         delay_print(f"You see someone here: {names}")
         
-    if len(game_state["clues"]) >= 2 and sum(
+    if len(game_state["clues"]) >= game_state.get("required_clues", 2) and sum(
         1 for s in game_state["suspects"]
         if any(f"You confront {s['name']}" in entry or f"Survived combat against {s['name']}" in entry for entry in game_state["journal"])
-    ) >= 2:
+    ) >= game_state.get("min_suspects_interrogated", 3):
         print(f"{ORANGE}You feel you have gathered enough evidence to make an accusation. The truth is within your grasp...{RESET}")
     # --- Show room name at the top in GREEN ---
     print(f"\n{GREEN}=== {room} ==={RESET}\n")
@@ -2439,7 +3734,14 @@ def describe_room():
         suspect_names = ", ".join(s["name"] for s in suspects_here)
         print(f"{ORANGE}[6] Interrogate suspect ({suspect_names}){RESET}")
     # Only show case resolution if at least 5 clues and 2 suspects interrogated
-    if len(game_state["clues"]) >= 2 and interrogated_count >= 2:
+    main_quest_stricken = any(
+    q.startswith("\033[9mInvestigate the disappearance of the Bishop.") for q in game_state.get("quests", [])
+)
+    if (
+        len(game_state["clues"]) >= 2
+        and interrogated_count >= 2
+        and not main_quest_stricken
+    ):
         print(f"{ORANGE}[7] ATTEMPT CASE RESOLUTION{RESET}")
         case_resolution_available = True
     else:
@@ -2486,7 +3788,6 @@ def describe_room():
         clear()
         print("Where would you like to go? (N, S, E, W)")
         print("You can also use arrow keys.")
-        import msvcrt
         dir_input = input("> ").strip().lower()
         if dir_input in ["n", "s", "e", "w"]:
             move_to_new_room(dir_input)
@@ -2590,209 +3891,85 @@ def interrogate_suspect():
                 suspect = suspects_here[idx]
                 game_state["suspects_interrogated"].add(suspect["name"])
                 clear()
-                desc = suspect.get("motive_long") or motive_descriptions.get(suspect.get("motive"), "")
+                # Show long flavor text on first encounter, short on subsequent
+                if not suspect.get("flavor_text_shown", False):
+                    desc = suspect.get("flavor_text")
+                    suspect["flavor_text_shown"] = True
+                else:
+                    desc = motive_descriptions.get(suspect.get("motive"), "")
                 if desc:
                     delay_print(desc)
+
                 delay_print(f"You confront {suspect['name']}.")
                 game_state["journal"].append(f"You confront {suspect['name']}")
                 asked_question = False
                 info_shown = False
 
+                response_count = 0  # Track number of responses since last clear
+
                 while True:
+                    if response_count and response_count % 3 == 0:
+                        clear()
+                        print(f"{ORANGE}(You pause to gather your thoughts before continuing the interrogation...){RESET}")
+
                     print("\nOptions:")
                     options = set()
-
-                    if asked_question:
-                        print("[J] Enter this testimony in your journal")
-                        options = {"j"}
-                        if suspect.get("credibility", 5) < 5:
-                            print(f"{ORANGE}[P] PERSUADE them to reveal more{RESET}")
-                            options.add("p")
-                        if game_state["clues"]:
-                            print(f"{ORANGE}[C] Confront with a clue{RESET}")
-                            options.add("c")
-                    print("[O] Observe body language")
-                    options.add("o")
-                    print("[A] Ask about their relationship to the Bishop")
-                    options.add("a")
-                    print("[T] Ask where they were at the time of the crime")
-                    options.add("t")
-                    print("[S] Ask who they suspect")
-                    options.add("s")
+                    print("[1] Observe body language")
+                    options.add("1")
+                    print("[2] Ask about their relationship to the Bishop")
+                    options.add("2")
+                    print("[3] Ask where they were at the time of the crime")
+                    options.add("3")
+                    print("[4] Ask who they suspect")
+                    options.add("4")
+                    print("[5] Ask about their knowledge of the crime")
+                    options.add("5")
+                    print("[6] Ask about their means/access")
+                    options.add("6")
+                    print("[7] Ask about witnesses")
+                    options.add("7")
+                    print("[8] Ask about financial motive")
+                    options.add("8")
+                    print("[9] Ask about secret relationships")
+                    options.add("9")
+                    print("[10] Ask about blackmail or occult matters")
+                    options.add("10")
+                    print("[11] Direct accusation")
+                    options.add("11")
                     if game_state["faith"] >= 14:
-                        print(f"{ORANGE}[B] Bless or rebuke the suspect (Faith){RESET}")
-                        options.add("b")
-                    print("[R] Return to action menu")
-                    options.add("r")
+                        print(f"{ORANGE}[12] Bless or rebuke the suspect (Faith){RESET}")
+                        options.add("12")
+                    if not game_state.get("persuasion_active", False) or (game_state.get("comeliness", 0) >= 14 or game_state.get("perception", 0) >= 14):
+                        print(f"{ORANGE}[13] Attempt Persuasion{RESET}")
+                        options.add("13")
+                    if game_state.get("clues"):
+                        print(f"{ORANGE}[14] Present a clue as evidence{RESET}")
+                        options.add("14")
+                    print("[0] Return to action menu")
+                    options.add("0")
 
                     choice = input("> ").strip().lower()
 
-                    # Show info block only after first ask
-                    if not info_shown and choice in {"a", "m", "t", "s"}:
-                        effective_weight = suspect.get("alibi_weight", 2)
-                        if game_state.get("persuasion_active", False):
-                            effective_weight = max(1, effective_weight - 1)
-                        if game_state.get("perception", 0) >= 14:
-                            effective_weight = max(1, effective_weight - 1)
-
-                        delay_print(f"Alibi Credibility (1=least, 4=most): {effective_weight}/4")
-                        if effective_weight == 1:
-                            delay_print("Their alibi seems very shaky.")
-                        elif effective_weight == 2:
-                            delay_print("Their alibi is questionable.")
-                        elif effective_weight == 3:
-                            delay_print("Their alibi seems fairly solid.")
-                        else:
-                            delay_print("Their alibi is very convincing.")
-
-                        perception_mod = 0
-                        if game_state.get("persuasion_active", False):
-                            perception_mod = 3
-                            game_state["persuasion_rounds"] -= 1
-                            game_state.setdefault("persuasion_targets", set()).add(suspect["name"])
-                            if game_state["persuasion_rounds"] <= 0 or len(game_state["persuasion_targets"]) >= 2:
-                                game_state["persuasion_active"] = False
-                                game_state["persuasion_rounds"] = 0
-                                game_state["persuasion_targets"] = set()
-                            delay_print("(Persuasion: Your perception is boosted!)")
-
-                        comeliness_mod = 0
-                        if game_state["comeliness"] >= 17:
-                            comeliness_mod = 2
-                        elif game_state["comeliness"] >= 14:
-                            comeliness_mod = 1
-
-                        if "credibility" not in suspect:
-                            suspect["credibility"] = random.randint(1, 10)
-
-                        effective_credibility = suspect["credibility"] + comeliness_mod
-                        effective_perception = game_state["perception"] + perception_mod
-
-                        if comeliness_mod > 0:
-                            delay_print(f"Your presence seems to sway them. (Comeliness modifier: +{comeliness_mod})")
-                        delay_print(f"Credibility rating: {effective_credibility}/10")
-                        delay_print(f"Perception (with boost): {effective_perception}/18")
-                        info_shown = True
-                        asked_question = True
-
-                    # --- Tolerance system: decrease on aggressive actions ---
                     def check_tolerance():
-                        suspect["tolerance"] = suspect.get("tolerance", 5)
+                        if "tolerance" not in suspect:
+                            suspect["tolerance"] = game_state.get("suspect_tolerance", 5)
                         suspect["tolerance"] -= 1
                         if suspect["tolerance"] == 2:
                             delay_print(f"{suspect['name']} is growing agitated. You sense danger.")
                         if suspect["tolerance"] <= 0:
-                            delay_print(f"{suspect['name']} snaps! They attack you in a fit of rage!")
-                            skill_check_combat(suspect["name"])
-                            return True
+                            if random.random() < 0.5:
+                                delay_print(f"{suspect['name']} snaps! They attack you in a fit of rage!")
+                                skill_check_combat(suspect["name"])
+                                # --- Exit interrogation if suspect is gone ---
+                                if suspect not in game_state["suspects"]:
+                                    delay_print(f"{suspect['name']} is no longer present.")
+                                    describe_room()
+                                    return True
+                            else:
+                                delay_print(f"{suspect['name']}'s eyes narrow, but they hold their composure... for now.")
                         return False
 
-                    if choice == "b" and "b" in options:
-                        if suspect.get("motive") in ["Fanaticism", "Zealotry"]:
-                            delay_print(f"{suspect['name']} recoils from your words. Your faith unsettles them, and they falter in their conviction.")
-                            suspect["credibility"] = max(0, suspect.get("credibility", 5) - 2)
-                            game_state["score"] += 5
-                        else:
-                            delay_print(f"You invoke a blessing. {suspect['name']} seems moved, but you sense no hidden evil.")
-                        wait_for_space()
-                        continue
-
-                    if choice == "p" and "p" in options:
-                        skill = random.choice(["perception", "sanity"])
-                        roll = game_state[skill] + roll_fudge()
-                        delay_print(f"(Push check: {skill.capitalize()} + die roll = {roll})")
-                        if roll > 12:
-                            delay_print("Your pressure pays off. The suspect cracks and reveals more!")
-                            if suspect.get("is_murderer"):
-                                delay_print("You catch a flicker of guilt in their eyes. They are hiding something big.")
-                                key_clue = game_state.get("solution_clue")
-                                if key_clue and key_clue not in game_state["clues"]:
-                                    game_state["clues"].append(key_clue)
-                                    delay_print(f"They let slip a vital detail: {key_clue}")
-                                    game_state["journal"].append(f"CLUE FOUND during interrogation: {key_clue}")
-                                    game_state["score"] += 10
-                            else:
-                                delay_print("They reveal a detail that points suspicion elsewhere.")
-                                unused_clues = [c for c in game_state["clue_pool"] if c not in game_state["clues"]]
-                                if unused_clues:
-                                    clue = random.choice(unused_clues)
-                                    game_state["clues"].append(clue)
-                                    delay_print(f"They mention something odd: {clue}")
-                                    game_state["journal"].append(f"CLUE FOUND during interrogation: {clue}")
-                                    game_state["score"] += 5
-                        else:
-                            delay_print("The suspect grows agitated and refuses to say more.")
-                            suspect["credibility"] = max(0, suspect["credibility"] - 1)
-                            if check_tolerance():
-                                return
-                        wait_for_space()
-                        continue
-
-                    elif choice == "j" and "j" in options:
-                        entries = []
-                        if asked_question:
-                            entries.append(f"Testimony from {suspect['name']} at {game_state['location']}:")
-                            if "relationship" in suspect:
-                                entries.append(f"  Relationship: {suspect.get('relationship', 'No details.')}")
-                            if "motive" in suspect:
-                                entries.append(f"  Motive: {suspect.get('motive', 'Unknown')}")
-                            if "alibi" in suspect:
-                                entries.append(f"  Alibi: {suspect.get('alibi', 'No details.')}")
-                            entries.append("-----------------------------")
-                            suspicion_score = 0
-                            if suspect.get("credibility", 5) <= 2:
-                                suspicion_score += 1
-                            if suspect.get("motive") == game_state.get("solution_motive"):
-                                suspicion_score += 1
-                            alibi_weight = suspect.get("alibi_weight", 2)
-                            if alibi_weight <= 2:
-                                suspicion_score += 1
-                            if suspect.get("opportunity"):
-                                suspicion_score += 1
-                            if suspicion_score >= 2:
-                                entries[0] = "* " + entries[0]
-                                entries.insert(1, f"{ORANGE}(This suspect is a strong candidate for the culprit based on your deductions.){RESET}")
-                            journal_entry = "\n".join(entries)
-                            already_recorded = any(
-                                f"Testimony from {suspect['name']} at {game_state['location']}:" in entry
-                                for entry in game_state["journal"]
-                            )
-                            if already_recorded:
-                                delay_print("Testimony for this suspect at this location is already in your journal.")
-                            else:
-                                game_state["journal"].append(journal_entry)
-                                delay_print("Testimony recorded in your journal.")
-                        else:
-                            delay_print("Ask at least one question before recording testimony.")
-                        wait_for_space()
-                        continue
-
-                    elif choice == "c" and "c" in options:
-                        print("Which clue do you want to confront with?")
-                        for i, clue in enumerate(game_state["clues"], 1):
-                            print(f"[{i}] {clue}")
-                        clue_choice = input("> ").strip()
-                        if clue_choice.isdigit():
-                            clue_idx = int(clue_choice) - 1
-                            if 0 <= clue_idx < len(game_state["clues"]):
-                                clue = game_state["clues"][clue_idx]
-                                if game_state["clue_motives"].get(clue) == suspect["motive"]:
-                                    delay_print("The suspect's eyes widen—they recognize the clue! You sense a breakthrough.")
-                                    suspect["credibility"] = max(0, suspect["credibility"] - 2)
-                                    delay_print("They stammer and contradict themselves. You sense they're hiding something.")
-                                    game_state["score"] += 15
-                                    game_state["journal"].append(
-                                        f"Confronted {suspect['name']} with clue: {clue} at {game_state['location']}"
-                                    )
-                                else:
-                                    delay_print("The suspect scoffs at your accusation.")
-                                    suspect["credibility"] = max(0, suspect["credibility"] - 1)
-                                    if check_tolerance():
-                                        return
-                        wait_for_space()
-                        continue
-
-                    elif choice == "o" and "o" in options:
+                    if choice == "1":
                         roll = game_state["perception"] + roll_fudge()
                         if roll >= 12:
                             delay_print(f"(Observation check: Perception + die roll = {roll})")
@@ -2802,12 +3979,15 @@ def interrogate_suspect():
                             )
                         else:
                             delay_print("You can't read their body language this time.")
+                        asked_question = True
                         wait_for_space()
+                        response_count += 1
                         continue
 
-                    elif choice == "a" and "a" in options:
-                        rel = suspect.get('relationship', 'I had my reasons for being here, but the Bishop and I were not close.')
+                    elif choice == "2":
+                        rel = suspect.get('relationship', random.choice(relationship_responses))
                         delay_print(f"{suspect['name']} says: '{rel}'")
+                        suspect.setdefault("asked", set()).add("relationship")
                         game_state["journal"].append(
                             f"Testimony from {suspect['name']} at {game_state['location']}: Relationship: {rel}"
                         )
@@ -2815,21 +3995,28 @@ def interrogate_suspect():
                         if check_tolerance():
                             return
                         wait_for_space()
+                        response_count += 1
                         continue
 
-                    elif choice == "t" and "t" in options:
+                    elif choice == "3":
                         alibi = suspect.get('alibi', 'I was alone, and no one can confirm my whereabouts.')
-                        delay_print(f"{suspect['name']} says: '{alibi}'")
+                        if isinstance(alibi, dict):
+                            alibi_text = alibi.get("text", str(alibi))
+                        else:
+                            alibi_text = str(alibi)
+                        delay_print(f"{suspect['name']} says: '{alibi_text}'")
+                        suspect.setdefault("asked", set()).add("alibi")
                         game_state["journal"].append(
-                            f"Testimony from {suspect['name']} at {game_state['location']}: Alibi: {alibi}"
+                            f"Testimony from {suspect['name']} at {game_state['location']}: Alibi: {alibi_text}"
                         )
                         asked_question = True
                         if check_tolerance():
                             return
                         wait_for_space()
+                        response_count += 1
                         continue
 
-                    elif choice == "s" and "s" in options:
+                    elif choice == "4":
                         other_name = random.choice([s['name'] for s in game_state['suspects'] if s['name'] != suspect['name']])
                         delay_print(f"{suspect['name']} says: 'If you ask me, {other_name} seemed suspicious.'")
                         game_state["journal"].append(
@@ -2839,26 +4026,168 @@ def interrogate_suspect():
                         if check_tolerance():
                             return
                         wait_for_space()
+                        response_count += 1
                         continue
 
-                    elif choice == "l":
-                        describe_room()
-                        return
+                    elif choice == "5":
+                        delay_print(f"{suspect['name']} {suspect.get('knowledge', 'I know nothing about that.')}")
+                        suspect.setdefault("asked", set()).add("knowledge")
+                        game_state["journal"].append(
+                            f"Testimony from {suspect['name']} at {game_state['location']}: Knowledge: {suspect.get('knowledge', '')}"
+                        )
+                        asked_question = True
+                        if check_tolerance():
+                            return
+                        wait_for_space()
+                        response_count += 1
+                        continue
 
-                    elif choice == "r":
+                    elif choice == "6":
+                        delay_print(f"{suspect['name']} {suspect.get('means', 'I had no special access.')}")
+                        suspect.setdefault("asked", set()).add("means")
+                        game_state["journal"].append(
+                            f"Testimony from {suspect['name']} at {game_state['location']}: Means: {suspect.get('means', '')}"
+                        )
+                        asked_question = True
+                        if check_tolerance():
+                            return
+                        wait_for_space()
+                        response_count += 1
+                        continue
+
+                    elif choice == "7":
+                        delay_print(f"{suspect['name']} says: '{suspect.get('witnesses', 'No one saw me.')}'")
+                        suspect.setdefault("asked", set()).add("witnesses")
+                        game_state["journal"].append(
+                            f"Testimony from {suspect['name']} at {game_state['location']}: Witnesses: {suspect.get('witnesses', '')}"
+                        )
+                        asked_question = True
+                        if check_tolerance():
+                            return
+                        wait_for_space()
+                        response_count += 1
+                        continue
+
+                    elif choice == "8":
+                        delay_print(f"{suspect['name']} says: '{suspect.get('financial', 'I have no financial motive.')}'")
+                        suspect.setdefault("asked", set()).add("financial")
+                        game_state["journal"].append(
+                            f"Testimony from {suspect['name']} at {game_state['location']}: Financial: {suspect.get('financial', '')}"
+                        )
+                        asked_question = True
+                        if check_tolerance():
+                            return
+                        wait_for_space()
+                        response_count += 1
+                        continue
+
+                    elif choice == "9":
+                        delay_print(f"{suspect['name']} says: '{suspect.get('secret_relationship', 'Nothing to confess.')}'")
+                        suspect.setdefault("asked", set()).add("secret_relationship")
+                        game_state["journal"].append(
+                            f"Testimony from {suspect['name']} at {game_state['location']}: Secret Relationship: {suspect.get('secret_relationship', '')}"
+                        )
+                        asked_question = True
+                        if check_tolerance():
+                            return
+                        wait_for_space()
+                        response_count += 1
+                        continue
+
+                    elif choice == "10":
+                        delay_print(f"{suspect['name']} says: '{suspect.get('blackmail', 'No comment.')}'")
+                        suspect.setdefault("asked", set()).add("blackmail")
+                        game_state["journal"].append(
+                            f"Testimony from {suspect['name']} at {game_state['location']}: Blackmail/Occult: {suspect.get('blackmail', '')}"
+                        )
+                        asked_question = True
+                        if check_tolerance():
+                            return
+                        wait_for_space()
+                        response_count += 1
+                        continue
+
+                    elif choice == "11":
+                        confession = suspect.get('confession', 'I have nothing to say.')
+                        delay_print(f"{suspect['name']} says: '{confession}'")
+                        suspect.setdefault("asked", set()).add("confession")
+                        game_state["journal"].append(
+                            f"Testimony from {suspect['name']} at {game_state['location']}: Confession: {confession}"
+                        )
+                        asked_question = True
+                        wait_for_space()
+                        response_count += 1
+                        # If the suspect confesses, jump to case resolution
+                        if confession == "Fine, I admit it!":
+                            # ... (existing confession/case resolution logic here) ...
+                            # (No change needed for the response_count logic)
+                            pass
+                        continue
+
+                    elif choice == "12" and game_state["faith"] >= 14:
+                        if suspect.get("motive") in ["Fanaticism", "Zealotry"]:
+                            delay_print(f"{suspect['name']} recoils from your words. Your faith unsettles them, and they falter in their conviction.")
+                            suspect["credibility"] = max(0, suspect.get("credibility", 5) - 2)
+                            game_state["score"] += 5
+                        else:
+                            delay_print(f"You invoke a blessing. {suspect['name']} seems moved, but you sense no hidden evil.")
+                        wait_for_space()
+                        response_count += 1
+                        continue
+
+                    elif choice == "13":
+                        if not game_state.get("persuasion_active", False):
+                            delay_print(f"{CYAN}You attempt to persuade {suspect['name']}...{RESET}")
+                            if game_state.get("comeliness", 0) >= 14 or game_state.get("perception", 0) >= 14:
+                                delay_print(f"{CYAN}{suspect['name']} seems swayed by your words!{RESET}")
+                                game_state["persuasion_active"] = True
+                                game_state["journal"].append(f"Persuaded {suspect['name']} at {game_state['location']}.")
+                                suspect["tolerance"] = game_state.get("suspect_tolerance", 5)
+                                delay_print(f"{YELLOW}{suspect['name']}'s tolerance for questioning has been restored!{RESET}")
+                            else:
+                                delay_print(f"{RED}Your attempt at persuasion fails to move {suspect['name']}.{RESET}")
+                            wait_for_space()
+                        response_count += 1
+                        continue
+
+                    elif choice == "14":
+                        if game_state.get("clues"):
+                            print("Which clue would you like to present?")
+                            for idx, clue in enumerate(game_state["clues"], 1):
+                                print(f"[{idx}] {clue}")
+                            clue_choice = input("> ").strip()
+                            if clue_choice.isdigit():
+                                clue_idx = int(clue_choice) - 1
+                                if 0 <= clue_idx < len(game_state["clues"]):
+                                    presented_clue = game_state["clues"][clue_idx]
+                                    delay_print(f"{YELLOW}You present the clue: {presented_clue}{RESET}")
+                                    # --- NEW: Suspect reacts to the clue ---
+                                    clue_motive = game_state.get("clue_motives", {}).get(presented_clue)
+                                    if clue_motive and clue_motive == suspect.get("motive"):
+                                        delay_print(f"{suspect['name']} looks shaken. \"I... I don't know what to say about that.\"")
+                                    else:
+                                        delay_print(f"{suspect['name']} glances at the clue, then shrugs. \"That doesn't prove anything about me.\"")
+                                    game_state["journal"].append(f"Presented clue to {suspect['name']}: {presented_clue}")
+                                    wait_for_space()
+                                    response_count += 1
+                                    continue
+                        delay_print("You have no clues to present.")
+                        wait_for_space()
+                        response_count += 1
+                        continue
+
+                    elif choice == "0":
                         describe_room()
                         return
 
                     else:
-                        handle_input(choice, interrogate_suspect)
+                        delay_print("Invalid selection.")
+                        wait_for_space()
                         continue
             else:
                 delay_print("Invalid selection.")
                 wait_for_space()
                 continue
-        else:
-            handle_input(user_input, interrogate_suspect)
-            continue
 
 def dream_flashback():
     global previous_menu_function
@@ -2961,32 +4290,26 @@ def get_player_name():
 
 def generate_structured_map():
     """
-    Generate a manor map with 16 fixed rooms and fill the rest with random rooms,
+    Generate a manor map with up to N fixed rooms and fill the rest with random rooms,
     ensuring no two random rooms share the same first letter with each other or with the fixed rooms.
     """
-    grid_half = 3  # For a 8x8 grid centered at (0,0)
-    # 16 fixed rooms for coverage
-    fixed_room_names = [
-        "Foyer", "Main Hall", "Manor Grounds", "Atrium", "Solarium", "Cellar",
-        "Garden", "Observatory", "Well House", "Horse Stable",
-        "Library", "Study", "Dining Hall", "Gallery", "Ballroom", "Chapel"
-    ]
-    # Assign 16 unique positions for these rooms
-    fixed_positions_list = [
-        (0, 0), (0, -1), (0, 1), (-grid_half, 0), (grid_half, 0), (0, grid_half),
-        (-grid_half - 1, 0), (grid_half + 1, 0), (0, grid_half + 1), (0, grid_half + 2),
-        (-2, -2), (2, -2), (-2, 2), (2, 2), (-2, 0), (2, 0)
-    ]
+    # Use the full grid size
+    positions = [(x, y) for x in range(MAP_MIN, MAP_MAX + 1) for y in range(MAP_MIN, MAP_MAX + 1)]
+
+    # Use up to N unique described rooms (or as many as you have in room_templates)
+    all_described_rooms = list(room_templates.keys())
+    max_fixed = min(len(positions), len(all_described_rooms))
+    fixed_room_names = all_described_rooms[:max_fixed]
+
+    # Assign up to N unique positions for these rooms, spreading them across the grid
+    random.shuffle(positions)
+    fixed_positions_list = positions[:max_fixed]
     fixed_positions = dict(zip(fixed_positions_list, fixed_room_names))
 
     # Find all remaining rooms not in fixed positions
     all_manor_rooms = [r for r in room_templates if r not in fixed_positions.values()]
-    available_positions = []
-    for x in range(-grid_half, grid_half + 1):
-        for y in range(-grid_half, grid_half + 1):
-            pos = (x, y)
-            if pos not in fixed_positions:
-                available_positions.append(pos)
+    available_positions = [pos for pos in positions if pos not in fixed_positions]
+
     random.shuffle(available_positions)
 
     # Helper to pick random rooms with unique first letters (not overlapping with fixed)
@@ -3050,7 +4373,7 @@ def generate_structured_map():
     game_state["visited_locations"] = visited_locations
     game_state["passages"] = passages
     game_state["location"] = "Foyer"
-    game_state["position"] = (0,0)  # Start at the Foyer
+    game_state["position"] = (0, 0)  # Start at the Foyer
 
 def associate_culprit_and_pools():
     # 1. Pick which pool will be the "solution" pool for this game
@@ -3099,11 +4422,14 @@ def associate_culprit_and_pools():
         return max(1, min(4, weight))
 
     # 3. Assign the culprit
+    culprit_template = random.choice(suspect_templates)
     culprit = {
-        "name": random.choice([s["name"] for s in suspect_templates]),
+        "name": culprit_template["name"],
         "motive": solution_motive["short"],
         "motive_long": solution_motive["long"],
         "alibi": solution_alibi,
+        "trait": culprit_template["trait"],
+        "gender": culprit_template["gender"],
         "opportunity": True,
         "is_murderer": True
     }
@@ -3313,6 +4639,10 @@ def character_creation():
 
     generate_structured_map() # Generate the structured map
     auto_generate_walls_and_doors() # Generate walls and locked doors
+    seal_random_region_with_locked_door()
+    # create_random_locked_region()  # Create a random locked region
+    # lock_all_doors()
+
     print(f"Walls generated: {len(game_state['walls'])}")
     print(f"Locked doors generated: {len(game_state['locked_doors'])}") # Debugging line
 
@@ -3323,29 +4653,42 @@ def character_creation():
     assign_potions_to_rooms()
     assign_elder_sign_to_room()
     assign_artifacts_to_rooms()  # Assign artifacts to rooms
+    place_silver_key()
 
     # Begin the first case
     start_first_case()
 
 clear()
 print("\nChoose your difficulty:")
-print("[1] Easy (2 clue minimum, suspects tolerate more questions)")
-print("[2] Hard (5 clue minimum, suspects are easily angered)")
+print("[1] Easy")
+print("[2] Hard")
 while True:
     diff = input("> ").strip()
     if diff == "1":
         game_state["difficulty"] = "easy"
         game_state["required_clues"] = 2
-        game_state["suspect_tolerance"] = 7
+        game_state["suspect_tolerance"] = 9
+        game_state["min_suspects_interrogated"] = 3
+        print("\nEasy Mode Selected:")
+        delay_print(" - Minimum clues required to solve the case: 2")
+        delay_print(" - Minimum suspects interrogated: 3")
+        delay_print(" - Suspects tolerate more questions before becoming hostile")
+        wait_for_space("Press SPACE to continue.")
         break
     elif diff == "2":
         game_state["difficulty"] = "hard"
-        game_state["required_clues"] = 5
+        game_state["required_clues"] = 8
         game_state["suspect_tolerance"] = 4
+        game_state["min_suspects_interrogated"] = 5
+        print("\nHard Mode Selected:")
+        delay_print(" - Minimum clues required to solve the case: 8")
+        delay_print(" - Minimum suspects interrogated: 5")
+        delay_print(" - Suspects are easily angered by repeated questioning")
+        wait_for_space("Press SPACE to continue.")
         break
     else:
-        print("Please select [1] or [2].")
-
+        delay_print("Please select [1] or [2].")
+    
 def start_first_case():
     global previous_menu_function
     previous_menu_function = start_first_case
@@ -3357,241 +4700,21 @@ def start_first_case():
     # delay_print(f"The Bishop was last seen in the {last_loc} at {last_time}.")
 
     describe_room()
-
-def skill_check_combat(enemy_name, enemy_difficulty=None, stat=None):
-    clear()
-    suspect = next((s for s in game_state["suspects"] if s["name"] == enemy_name), None)
-    delay_print(f"You face off against {enemy_name}. The air crackles with tension.")
-    wait_for_space()
-
-    player_stamina = game_state["stamina"]
-    player_strength = game_state["strength"]
-    player_agility = game_state["agility"]
-
-    if suspect:
-        enemy_stamina = suspect.get("stamina", 10)
-        enemy_strength = suspect.get("strength", 8)
-        enemy_agility = suspect.get("agility", 8)
-        enemy_name = suspect["name"]
-    else:
-        enemy_stamina = enemy_difficulty if enemy_difficulty is not None else 10
-        enemy_strength = 8
-        enemy_agility = 8
-
-    # --- DEFINE FLAVOR LISTS HERE ---
-    enemy_flavor = [
-        f"{enemy_name} lands a heavy blow to your ribs.",
-        f"{enemy_name} slams a fist into your shoulder.",
-        f"{enemy_name} catches you off guard with a quick punch.",
-        f"{enemy_name} drives you back with a sudden shove.",
-        f"{enemy_name} lands a glancing blow to your cheek.",
-        f"{enemy_name} strikes you with surprising force.",
-        f"{enemy_name}'s fingernails rip into your throat, leaving burning scratches.",
-        f"{enemy_name} grabs your hair and slams your head against the wall."
-    ]
-    gory_flavor = [
-        f"The monstrosity tries to rend the flesh from your bones!",
-        f"With a guttural roar, the creature's claws slash at your throat, spraying blood across the walls.",
-        f"The abomination lunges, jaws distending to snap at your face.",
-        f"Tentacles burst from its torso, writhing and seeking to strangle you.",
-        f"Your skin burns as acidic saliva drips from its fangs.",
-        f"It hammers you with inhuman strength, bones creaking under the impact.",
-        f"Eyes blink open across its body, all fixed hungrily on you.",
-        f"The thing's claws rake deep gouges into your side, hot blood pouring down.",
-        f"It shrieks, a sound that makes your vision blur and your heart pound with terror.",
-        f"With a sickening crunch, it bites into your shoulder, tearing flesh and muscle.",
-        f"Black ichor sprays as the beast's claws rip through your defenses.",
-        f"The horror's jaws snap shut inches from your face, spattering you with foul saliva.",
-        f"Your vision swims as the creature's tentacles squeeze the breath from your lungs.",
-        f"Bone and sinew snap as the abomination slams you against the wall.",
-        f"A dozen eyes blink open across its chest, all staring hungrily at you."
-    ]
-    horror_text = [
-        f"As {enemy_name} strikes you, their flesh ripples and splits, revealing writhing tentacles and lidless, unblinking eyes.",
-        f"{enemy_name}'s mouth distends impossibly wide, emitting a chorus of whispers in a language not meant for human ears.",
-        f"Your attacker’s skin sloughs away, replaced by a mass of chitinous plates and twitching, alien appendages.",
-        f"With a sickening crack, {enemy_name}'s limbs elongate and bend backwards, their face melting into a mass of wriggling feelers.",
-        f"The corpse of {enemy_name} convulses, sprouting glistening, phosphorescent tendrils that thrash blindly at the air."
-    ]
-    # --- END FLAVOR LISTS ---
-
-    round_num = 1
-    sanity_lost = 0  # Track total sanity loss in this combat
-    transformed = False  # Track if the suspect has transformed
-
-    while player_stamina > 0 and enemy_stamina > 0:
-        clear()
-        if game_state["sanity"] < 4:
-            delay_print(RED + "WARNING: Your sanity is dangerously low!" + RESET)
-        if player_agility < 4:
-            delay_print(RED + "WARNING: Your agility is dangerously low!" + RESET)
-        if player_strength < 4:
-            delay_print(RED + "WARNING: Your strength is dangerously low!" + RESET)
-        if player_stamina < 4:
-            delay_print(RED + "WARNING: Your stamina is dangerously low!" + RESET)
-
-        delay_print(f"--- Melee Round {round_num} ---")
-        delay_print(f"Your Stamina: {player_stamina} | {enemy_name}'s Stamina: {enemy_stamina}")
-
-        # Show sanity every round after transformation
-        if transformed:
-            delay_print(f"Your Sanity: {game_state['sanity']}")
-
-        # --- Add combat options here ---
-        print("\nWhat will you do?")
-        print("[A] Attack")
-        print("[U] Use an item")
-        print("[F] Flee")
-        print("[S] Show stats")
-
-        action = input("> ").strip().lower()
-        if action == "u":
-            use_item(lambda: None)
-            # Update player stats in case a potion/artifact was used
-            player_stamina = game_state["stamina"]
-            player_strength = game_state["strength"]
-            player_agility = game_state["agility"]
-            continue  # Skip to next round after using an item
-        elif action == "s":
-            show_stats()
-            continue
-        elif action == "f":
-            if transformed:
-                print(f"{ORANGE}[F] Flee for your life!{RESET} or press Enter to stand your ground.")
-                flee_choice = input("> ").strip().lower()
-                if flee_choice == "f":
-                    escaped = timing_bullseye_chase()
-                    if escaped:
-                        delay_print("You manage to escape the horror and slam the door behind you!")
-                        wait_for_space()
-                        describe_room()
-                        return
-                    else:
-                        delay_print("The horror catches you! You are forced to fight for your life!")
-                        # Continue combat as normal
-            else:
-                delay_print(RED + "You attempt to flee, but your opponent lands a parting blow! (Stamina -2, Score -10)" + RESET)
-                game_state["stamina"] = max(0, game_state["stamina"] - 2)
-                game_state["score"] -= 10
-                wait_for_space()
-                describe_room()
-                return
-
-        # Player's composite score
-        player_base = (player_strength + player_stamina + player_agility) // 3
-        player_roll = player_base + roll_fudge() + (player_agility - enemy_agility) // 2
-
-        # Enemy's composite score
-        enemy_base = (enemy_strength + enemy_stamina + enemy_agility) // 3
-        enemy_roll = enemy_base + roll_fudge() + (enemy_agility - player_agility) // 2
-
-        delay_print(f"Your combat score: {player_base} + die roll + agility mod = {YELLOW}{player_roll}{RESET}")
-        delay_print(f"Enemy combat score: {enemy_base} + die roll + agility mod = {YELLOW}{enemy_roll}{RESET}")
-
-        if player_roll >= enemy_roll:
-            # Player hits enemy
-            player_damage = max(1, 1 + (player_strength - enemy_strength) // 4)
-            delay_print(YELLOW + f"You strike {enemy_name} for {player_damage} damage!" + RESET)
-            enemy_stamina -= player_damage
-        else:
-            damage = max(1, 1 + (enemy_strength - player_strength) // 4)
-            # Faith reduces supernatural damage from transformed foes
-            if transformed and game_state["faith"] >= 14:
-                delay_print(f"{ORANGE}Your faith shields you from the worst of the supernatural assault! (Damage halved){RESET}")
-                damage = max(1, damage // 2)
-            elder_god_twist = False
-            if suspect and random.random() < 0.15 and sanity_lost == 0:
-                elder_god_twist = True
-            if elder_god_twist:
-                # --- Transformation occurs here ---
-                if not transformed:
-                    delay_print(RED + "The suspect's body contorts and transforms into a monstrous horror!" + RESET)
-                    enemy_strength += 1
-                    if suspect:
-                        suspect["strength"] = enemy_strength
-                    transformed = True
-                            # --- Offer flee option here ---
-                    print(f"{ORANGE}[F] Flee for your life!{RESET} or press Enter to stand your ground.")
-                    flee_choice = input("> ").strip().lower()
-                    if flee_choice == "f":
-                        escaped = timing_bullseye_chase()
-                        if escaped:
-                            delay_print("You manage to escape the horror and slam the door behind you!")
-                            wait_for_space()
-                            describe_room()
-                            return
-                        else:
-                            delay_print("The horror catches you! You are forced to fight for your life!")
-                            # Continue combat as normal
-                delay_print(f"Your Sanity: {game_state['sanity']}")
-                delay_print(ORANGE + random.choice(gory_flavor) + RESET)
-                delay_print(f"You lose {damage} stamina.")
-                delay_print("\n" + random.choice(horror_text))
-                delay_print("You reel in terror as the truth is revealed: this was no mere mortal, but a servant of some higher unspeakable evil from some other upside down plane of existence!")
-                game_state["sanity"] = max(0, game_state["sanity"] - 1)
-                sanity_lost = 2
-            else:
-                if transformed:
-                    delay_print(ORANGE + random.choice(gory_flavor) + RESET)
-                    delay_print(f"You lose {damage} stamina.")
-                    delay_print("\n" + random.choice(horror_text))
-                else:
-                    delay_print(ORANGE + random.choice(enemy_flavor) + RESET)
-                    delay_print(f"You lose {damage} stamina.")
-                player_stamina -= damage
-
-        delay_print(f"Your Stamina: {player_stamina} | {enemy_name}'s Stamina: {enemy_stamina}")
-        round_num += 1
-        wait_for_space()
-
-    # End of combat (rest of your function unchanged)
-    game_state["stamina"] = player_stamina
-    if suspect:
-        suspect["stamina"] = enemy_stamina
-
-    if player_stamina > 0:
-        delay_print(f"You overcome the threat posed by {enemy_name}! You live to investigate another day.")
-        game_state["journal"].append(f"Survived combat against {enemy_name}.")
-        if suspect:
-            suspect["stamina"] = 0
-            if 'transformed' in locals() and transformed:
-                print("P̴̧̧͔̦̲͙͉̘̰̜͎̤̻̹̤͋̀̈́̄́̂͐͂̈́̓͐͒͜͝h̴̡̡̡̲͓̜̬͎̖̟̞̦͙̑̀͊̎̌̐̆̽̆̈́̆͌̕ͅ'̶̜̟͛̉̎̅̿̊n̴͇̟͋g̴̥̦̟̘̝̱͉̲̤͙͇͋̄̐̏͊̔͌́͛̇l̶̡͙̻̗̩̬̣̰͚̯̲̉̃̒́͛͆͋̀͛͆̃͜͝ụ̷̧̧͎̯̜͕̻̘̬̙̱͈͛͐ͅi̴̖͓̥͔͕͍̮͇̼͚̗̭̻͌̈́̈́̈́͊̿̀͆͋̀͌̍̀̍͜͠͠͝ ̵̢̩̟̫̣̪̬͍̳̞̰͕̝͚̣͗͛̈́͘̚m̷̛͔̱̎̐̊̀͐̑͆̑̈́͛͘͝g̸̡̨͛͒̈͆͝l̸̡̨͕̣͎̙͕̥͛̎͆̊͛̋̍̿͐̅̄̋̔̈́̓̕͝w̵̧̖̟̠̼̠̼̗̜̱͈̮̩͆'̴͕̟̹͙̝̼͖̟̈̃̈́̉͛̀͛̂͘͝n̸̲̜̭̪̩̅͌̀̏͛̅̎̋͑͐̏̈́̽̌͝͝a̵̡̫͙̻͓͉͈͈͉̙͑͗͗͝f̵̨̖̯̳̮̳̼̺̠̰̘̘̙̗͍͖͆͑̀͂͋̈̑̈͜͝h̸͏̡̛͈̱͇͉̯̹̘͋̄̾̽͋́͂͛̊̕͝ ̸̧̣̫̳̥̥̲̖̻̭̾̅̎́̀̓̉́̇̕͝͝ͅͅw̴̨͖̼͕͉͍̺͐́̈̈́ģ̴̛̫͎̼̥͕̦̮͈̩̺̈́̃̇a̶̛̱͔̩̦͙͇̖͚̲̙͖͚͎͈̓͑̀͒ḩ̶̨̝̺͚͎̺̙͕̞̂͐̂́̈́̍͛͝ͅ'̵͚̝̝̩̗̭̦̇̐̈́̃̊̌̔́̌͝͝͝ͅņ̴̗͕̬̞̻̼̜̥͈̣̬͇̦̻͖̏́̓͒̈́͐́͠ͅa̸̹̟̯͈̣͖͙͝g̴̨̼̤̜̥̼̰͈̞̪̙̭̅̃͛̆l̸͚̗͉̖̰̿̊͐͌̈́̃ͅ ̷̟͇͕̘̰̤͖̰̜̝̰̗̼̟̱͖̂̈̈́̔̌̊̕͜f̸̧̲̬̤͍̙̰͎̲͖̭̜̖̫̅̒́̃͜h̴̛̩̫͕̣̻͛́́̏̈́̐ẗ̵̨̛̛̻̻͉̗̲̙̠̦̜̔̾͒̑͂̈́͑̏̈͊̊͋ͅa̷̢̰͍̞̭̗̜̣̒̔͑ǧ̴̨̱̘̣͕͙̘̺͍̦̒͌́̓̎͋n̴͍͔͔͙̰͐͜!")
-                game_state["score"] -= 15
-                delay_print("You have taken a life in self-defense. The weight of this act will haunt you. (-15 Score)")
-            if suspect in game_state["suspects"]:
-                game_state["suspects"].remove(suspect)
-    else:
-        delay_print(f"The encounter with {enemy_name} overwhelms you...")
-        game_state["journal"].append(f"Defeated by {enemy_name}. Survived, but barely.")
-
-    if suspect and suspect.get("is_murderer") and player_stamina > 0:
-        game_state["score"] -= 25
-        delay_print(f"As {suspect['name']} falls, the truth is revealed: {suspect['name']} was the murderer all along!")
-        delay_print("But justice through violence is not justice at all. The Commissioner is furious at your methods.")
-        delay_print("You have failed to solve the mystery through deduction. The case is closed in disgrace.")
-        print(RED + r"""
- __     __           _                    
- \ \   / /          | |                   
-  \ \_/ /__  _   _  | |     ___  ___  ___ 
-   \   / _ \| | | | | |    / _ \/ __|/ _ \
-    | | (_) | |_| | | |___| (_) \__ \  __/
-    |_|\___/ \__,_| |______\___/|___/\___|
-    """ + RESET)        
-        delay_print("Sorry!")
-        show_score()
-        wait_for_space()
+    
+print("\nWould you like to:")
+print("[1] Start a new game")
+print("[2] Load a saved game")
+while True:
+    next_choice = input("> ").strip()
+    if next_choice == "1":
         title_screen()
-        return
-
-    if player_stamina <= 0:
-        delay_print("You have succumbed to exhaustion. The investigation ends here.")
-        game_state["score"] -= 35
-        show_score()
-        # wait_for_space()
-        title_screen()
+        break
+    elif next_choice == "2":
+        load_game()
+        break
     else:
-        wait_for_space()
-
+        delay_print("Please select [1] or [2].")
+        
 # --- Main Menu ---
 title_screen()
 
