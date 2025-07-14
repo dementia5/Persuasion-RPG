@@ -1,4 +1,4 @@
-“The Bishop’s Last Sermon” is the core mystery and main quest of Persuasion, and it sets the tone for the entire game: gothic, investigative, and psychological. Here's a breakdown of the quest, its premise, structure, and how it evolves with gameplay mechanics:
+**“The Bishop’s Last Sermon” is the core mystery and main quest of Persuasion, and it sets the tone for the entire game: gothic, investigative, and psychological. Here's a breakdown of the quest, its premise, structure, and how it evolves with gameplay mechanics:**
 
 
 ---
