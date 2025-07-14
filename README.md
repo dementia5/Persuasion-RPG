@@ -24,7 +24,7 @@ Unravel a chilling murder plot by:
 - 🎭 Evaluating suspect credibility using a dynamic truth-detection system based on your perception, sanity, and growing reputation.
 - 🩸 Engaging in deadly confrontations if the murderer strikes—or if you do.
 
-For a full overview of the mystery, see the [Main Mystery Guide](mainmystery.md).
+For a full overview of the mystery, see the [Main Mystery Guide](MainMystery.md).
 
 ---
 
