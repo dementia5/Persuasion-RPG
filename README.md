@@ -2,7 +2,9 @@
 
 ![Persuasion Logo](Persuasion.png)
 
-### **# 🕯️ PERSUASION**
+🕯️ 
+## PERSUASION
+ 
 
 A Text-Driven Victorian Roguelike Mystery
 
@@ -55,7 +57,8 @@ The world of Persuasion features subtle supernatural elements, rooted in psychol
 
 ---
 
-###📎 Core Features
+📎  
+## CORE FEATURES
 
 - ✔️ 100% keyboard-controlled interface
 - ✔️ ASCII map with location initials and movement trail
@@ -84,6 +87,7 @@ Can you see through the veil of fear, or will you be the next body found in the 
 ---
 
 #### 📦 Download
+## RELEASE FILES
 
 - [Download Persuasion48.zip](Persuasion48.zip)
 
