@@ -1,6 +1,6 @@
 ![Persuasion Logo](Persuasion.png)
 
-# 🕯️ PERSUASION
+**# 🕯️ PERSUASION**
 
 A Text-Driven Victorian Roguelike Mystery
 
@@ -57,12 +57,18 @@ The world of Persuasion features subtle supernatural elements, rooted in psychol
 
 - ✔️ 100% keyboard-controlled interface
 - ✔️ ASCII map with location initials and movement trail
-- ✔️ Stat-based skill checks in combat and clue discovery
+- ✔️ Stat-based skill checks for interrogation, combat and clue discovery
 - ✔️ Inventory, quest log, and journal systems
-- ✔️ Clue credibility & reputation scoring
+- ✔️ Clue credibility & reputation scoring 
 - ✔️ Save/load functionality
 - ✔️ Procedural map generation and mansion layouts
-- ✔️ Optional suspect combat and murder ambushes
+- ✔️ Combat and persuasion systems have been expanded with new transformation mechanics and chase minigame
+- ✔️ Dynamic NPC movement: suspects roam the mansion, can chase or halt when colliding with player
+- ✔️ Turn-based progression and fog-of-war navigation
+- ✔️ Supernatural events, sanity effects, and stat-based text distortion
+- ✔️ Multiple difficulty modes (Easy/Hard) affecting clues, suspect tolerance, and chase speed
+- ✔️ Unique artifacts, potions, and clues scattered throughout the manor
+- ✔️ Deduction tree and suspicion hints (toggleable in journal)
 - ✔️ Stylish retro aesthetic and 8-bit inspired art (WIP as DLC)
 
 ---
