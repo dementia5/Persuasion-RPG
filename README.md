@@ -74,7 +74,7 @@ The world of Persuasion features subtle supernatural elements, rooted in psychol
 - ✔️ Multiple difficulty modes (Easy/Hard) affecting clues, suspect tolerance, and chase speed
 - ✔️ Unique artifacts, potions, and clues scattered throughout the manor
 - ✔️ Deduction tree and suspicion hints (toggleable in journal)
-- ✔️ Stylish retro aesthetic and 8-bit inspired art (WIP as DLC)
+- ✔️ Stylish retro aesthetic and 8-bit inspired art (coming soon as DLC!)
 
 ---
 
