@@ -1,3 +1,5 @@
+<div align="center">
+
 ![Persuasion Logo](Persuasion.png)
 
 **# 🕯️ PERSUASION**
@@ -5,7 +7,7 @@
 A Text-Driven Victorian Roguelike Mystery
 
 Step into the fog-drenched world of Persuasion, a haunting retro-inspired RPG where choices are dynamic, every shadow hides a secret, and every whispered lie could be your last clue.
-
+</div>
 ---
 
 🎩 Victorian Gothic Atmosphere
