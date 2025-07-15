@@ -32,7 +32,7 @@ Interrogate up to 8 suspects, each with motives, alibis, and ties to the bishop.
 
 Use your perception, sanity, and reputation to gauge credibility of responses.
 
-Maintain a journal where events, clues, and interrogations are logged and color-coded based on trust level.
+Maintain a journal where events, clues, and interrogations are logged and ranked by trust level.
 
 
 
@@ -40,7 +40,7 @@ Maintain a journal where events, clues, and interrogations are logged and color-
 
 Hidden symbols, blood-written prayers, and forbidden texts suggest a secret cult.
 
-Some clues lead to an off-map ritual chamber or forbidden wing.
+Some clues may lead to an off-map ritual chamber in a far off domain.
 
 Sanity tests trigger hallucinations or distorted reality descriptions in the UI.
 
@@ -50,8 +50,7 @@ Sanity tests trigger hallucinations or distorted reality descriptions in the UI.
 
 After certain turns or events, the murderer may move rooms, attack, or disrupt.
 
-Dynamic events may include locked doors, disappearances, or deaths of suspects.
-
+Dynamic events may include locked doors, disappearances, or wandering spectral events.
 
 
 5. Climax
@@ -63,9 +62,6 @@ Correct accusation requires:
 Three corroborating clues
 
 High credibility score
-
-Sufficient reputation
-
 
 
 
@@ -79,7 +75,7 @@ Who you accuse
 
 How much sanity remains
 
-Whether you've uncovered the Bishop's forbidden sermon text hidden somewhere in the chapel or attic.
+Whether you've uncovered the Bishop's forbidden sermon text (The Book of Eibon) hidden somewhere in the chapel or attic.
 
 
 
@@ -93,8 +89,6 @@ Whether you've uncovered the Bishop's forbidden sermon text hidden somewhere in 
 Suspect Movement: As you close in, the murderer becomes erratic, moving or attacking.
 
 Hybrid Interrogation/Combat: If you press the right suspect, they may fight back.
-
-Room Dynamics: Secret rooms unlock only after discovering certain clues.
 
 Sanity Decay: The more you learn, the less your mind withstands. Reality blurs.
 
