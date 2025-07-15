@@ -60,6 +60,7 @@ The world of Persuasion features subtle supernatural elements, rooted in psychol
 📎  
 ## CORE FEATURES
 
+- ✔️ Track solved mysteries, testamonies, clues and artifacts in your journal
 - ✔️ 100% keyboard-controlled interface
 - ✔️ ASCII map with location initials and movement trail
 - ✔️ Stat-based skill checks for interrogation, combat and clue discovery
