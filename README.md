@@ -64,7 +64,8 @@ The world of Persuasion features subtle supernatural elements, rooted in psychol
 - ✔️ ASCII map with location initials and movement trail
 - ✔️ Stat-based skill checks for interrogation, combat and clue discovery
 - ✔️ Inventory, quest log, and journal systems
-- ✔️ Clue credibility & reputation scoring 
+- ✔️ Clue credibility & reputation scoring
+- ✔️ A complete scoring system
 - ✔️ Save/load functionality
 - ✔️ Procedural map generation and mansion layouts
 - ✔️ Combat and persuasion systems have been expanded with new transformation mechanics and chase minigame
