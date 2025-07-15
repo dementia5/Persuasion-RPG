@@ -86,6 +86,7 @@ Can you solve the mystery before the shadows claim you? The answer is always dif
 - ✔️ Stylish retro aesthetic and 8-bit inspired art (coming soon as DLC!)
 
 ---
+![Persuasion Screenie](Persuasion_screenshot.png)
 
 🎮 A Game of Logic, Faith, and Perception
 
