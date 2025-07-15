@@ -60,6 +60,12 @@ The world of Persuasion features subtle supernatural elements, rooted in psychol
 📎  
 ## CORE FEATURES
 
+**Unravel the Mystery with Dynamic Deduction!**
+
+Every playthrough of Persuasion features a fully interactive deduction chart, letting you track suspects’ motives, means, alibis, relationships, and more. No two investigations are ever the same—each time you play, the culprit is randomly assigned new motives, secrets, and opportunities. Piece together clues, interrogate suspects, and watch your deduction tree grow as you uncover the tangled web of lies and hidden truths. With every motive, means, and alibi shuffled for each case, your path to justice is always fresh, challenging, and deeply rewarding.
+
+Can you solve the mystery before the shadows claim you? The answer is always different!
+
 - ✔️ Track solved mysteries, testamonies, clues and artifacts in your journal
 - ✔️ 100% keyboard-controlled interface
 - ✔️ ASCII map with location initials and movement trail
