@@ -22,7 +22,7 @@ Set in the eerie halls of a decaying Victorian estate, Persuasion draws you into
 
 Unravel a chilling murder plot by:
 
-- 🔍 Investigating over two dozen uniquely described rooms, from the Parlor to the Torture Chamber.
+- 🔍 Investigating over 40  uniquely described rooms, from the Parlor to the Torture Chamber.
 - 🧠 Interrogating up to 8 suspects, each with their own alibis, motives, and behavioral traits.
 - 📓 Tracking clues and suspicions through your interactive investigation journal.
 - 🎭 Evaluating suspect credibility using a dynamic truth-detection system based on your perception, sanity, and growing reputation.
