@@ -28,7 +28,7 @@ A dream or vision hints at the supernatural angle (used in the dream flashback).
 
 Search rooms for clues (physical evidence, books, artifacts, cryptic symbols).
 
-Interrogate 8 suspects, each with motives, alibis, and ties to the bishop.
+Interrogate up to 8 suspects, each with motives, alibis, and ties to the bishop.
 
 Use your perception, sanity, and reputation to gauge credibility of responses.
 
