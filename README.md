@@ -68,6 +68,7 @@ The world of Persuasion features subtle supernatural elements, rooted in psychol
 - ✔️ A complete scoring and achievement system
 - ✔️ Save/load functionality
 - ✔️ Procedural map generation and mansion layouts
+- ✔️ Persuasion skill: Use your innate ability to influence suspects 
 - ✔️ Combat and persuasion systems have been expanded with new transformation mechanics and chase minigame
 - ✔️ Dynamic NPC movement: suspects roam the mansion, can chase or halt when colliding with player
 - ✔️ Turn-based progression and fog-of-war navigation
