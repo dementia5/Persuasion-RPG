@@ -71,14 +71,14 @@ Can you solve the mystery before the shadows claim you? The answer is always dif
 - ✔️ ASCII map with location initials and movement trail
 - ✔️ Stat-based skill checks for interrogation, combat and clue discovery
 - ✔️ Inventory, quest log, and journal systems
-- ✔️ Clue credibility & reputation scoring
+- ✔️ Clue/evidence credibility ranking
 - ✔️ A complete scoring and achievement system
-- ✔️ Save/load functionality
+- ✔️ Single save system
 - ✔️ Procedural map generation and mansion layouts
 - ✔️ Persuasion skill: Use your innate ability to influence suspects 
-- ✔️ Combat and persuasion systems have been expanded with new transformation mechanics and chase minigame
+- ✔️ Combat and persuasion systems expanded with new transformation mechanics and chase minigame
 - ✔️ Dynamic NPC movement: suspects roam the mansion, can chase or halt when colliding with player
-- ✔️ Turn-based progression and fog-of-war navigation
+- ✔️ Turn-based progression and optional fog-of-war navigation
 - ✔️ Supernatural events, sanity effects, and stat-based text distortion
 - ✔️ Multiple difficulty modes (Easy/Hard) affecting clues, suspect tolerance, and chase speed
 - ✔️ Unique artifacts, potions, and clues scattered throughout the manor
