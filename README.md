@@ -99,7 +99,7 @@ Can you see through the veil of fear, or will you be the next body found in the 
 #### 📦 Download
 ## RELEASE FILES
 
-- [Download Persuasion50.zip](Persuasion50.zip)
+- [Download Persuasion50.zip](Persuasion50.zip) (introduced achievements and improved the scoring system)
 <!--- (Persuasion49untested.zip) --->
 
 ---
