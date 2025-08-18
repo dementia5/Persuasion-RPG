@@ -30,3 +30,5 @@ SOFTWARE.
 #
 # Persuasion is a Victorian roguelike investigation RPG set in a haunted manor shrouded in fog and cosmic dread.
 
+This game uses pygame, which is licensed under the GNU Lesser General Public License (LGPL) v2.1.
+See the included LGPL.txt for details.
